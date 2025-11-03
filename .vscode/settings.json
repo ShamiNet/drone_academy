@@ -1,0 +1,6 @@
+{
+    "geminicodeassist.agentDebugMode": true,
+    "geminicodeassist.agentYoloMode": false,
+    "geminicodeassist.chat.defaultCodeBlockDisplay": "Preview",
+    "geminicodeassist.codeGenerationPaneViewEnabled": false
+}

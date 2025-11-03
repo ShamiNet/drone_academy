@@ -1,0 +1,4 @@
+# intl: ^0.19.0 or latest version
+# Add this under dependencies in your pubspec.yaml:
+# dependencies:
+#   intl: ^0.19.0
