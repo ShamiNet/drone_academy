@@ -634,6 +634,46 @@ class AppLocalizationsAr extends AppLocalizations {
   String get success => 'نجاح';
 
   @override
+  String get appControl => 'إعدادات التطبيق';
+
+  @override
+  String get appEnabled => 'التطبيق ممكّن';
+
+  @override
+  String get forceUpdate => 'فرض التحديث';
+
+  @override
+  String get maintenanceMessage =>
+      'التطبيق في وضع الصيانة. يرجى المحاولة لاحقاً.';
+
+  @override
+  String get updateUrl => 'رابط التحديث';
+
+  @override
+  String get updateMessage => 'رسالة التحديث';
+
+  @override
+  String get enterUrl => 'الرجاء إدخال رابط التحديث';
+
+  @override
+  String get configSaved => 'تم حفظ الإعدادات!';
+
+  @override
+  String get saveConfig => 'حفظ الإعدادات';
+
+  @override
+  String get unblockUser => 'إلغاء حظر المستخدم';
+
+  @override
+  String get blockUser => 'حظر المستخدم';
+
+  @override
+  String get userBlocked => 'تم حظر المستخدم بنجاح.';
+
+  @override
+  String get userUnblocked => 'تم إلغاء حظر المستخدم بنجاح.';
+
+  @override
   String get reportReadyTitle => 'التقرير جاهز';
 
   @override

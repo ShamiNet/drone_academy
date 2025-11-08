@@ -638,11 +638,50 @@ class AppLocalizationsRu extends AppLocalizations {
   String get success => 'Успешно';
 
   @override
+  String get appControl => 'Управление приложением';
+
+  @override
+  String get appEnabled => 'Приложение включено';
+
+  @override
+  String get forceUpdate => 'Принудительное обновление';
+
+  @override
+  String get maintenanceMessage =>
+      'Приложение находится в режиме обслуживания. Пожалуйста, попробуйте позже.';
+
+  @override
+  String get updateUrl => 'URL для обновления';
+
+  @override
+  String get updateMessage => 'Сообщение об обновлении';
+
+  @override
+  String get enterUrl => 'Пожалуйста, введите URL для обновления';
+
+  @override
+  String get configSaved => 'Настройки сохранены!';
+
+  @override
+  String get saveConfig => 'Сохранить настройки';
+
+  @override
+  String get unblockUser => 'Разблокировать пользователя';
+
+  @override
+  String get blockUser => 'Заблокировать пользователя';
+
+  @override
+  String get userBlocked => 'User has been blocked.';
+
+  @override
+  String get userUnblocked => 'User has been unblocked.';
+
+  @override
   String get reportReadyTitle => 'Отчет готов';
 
   @override
-  String get reportSavedSuccessfully =>
-      'Report saved successfully in Downloads.';
+  String get reportSavedSuccessfully => 'Отчет успешно сохранен в Скачиваниях.';
 
   @override
   String get reportSavedSuccess => 'Отчет успешно сохранен в Скачиваниях.';

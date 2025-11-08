@@ -65,37 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // --- تم الإصلاح هنا: تمرير دالة setLocale ---
       return TrainerDashboard(onLocaleChange: widget.setLocale);
     } else if (_userRole == 'trainee') {
-      return DefaultTabController(
-        length: 4,
-        child: Column(
-          children: [
-            TabBar(
-              tabs: [
-                Tab(
-                  text: l10n.trainings,
-                  icon: const Icon(Icons.model_training),
-                ),
-                Tab(
-                  text: l10n.competitions,
-                  icon: const Icon(Icons.emoji_events),
-                ), // --- 3. إضافة التبويب الجديد ---
-                Tab(text: l10n.equipment, icon: const Icon(Icons.construction)),
-                Tab(text: l10n.inventory, icon: const Icon(Icons.all_inbox)),
-              ],
-            ),
-            const Expanded(
-              child: TabBarView(
-                children: [
-                  TraineeDashboard(),
-                  TraineeCompetitionsScreen(), // --- 4. إضافة الواجهة الجديدة ---
-                  EquipmentCheckoutScreen(),
-                  InventoryScreen(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+      return const TraineeDashboard(); // إرجاع الواجهة البسيطة للمتدرب
     } else if (_userRole == 'admin') {
       return const AdminDashboard();
     } else {

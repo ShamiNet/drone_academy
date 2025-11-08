@@ -634,6 +634,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get success => 'Success';
 
   @override
+  String get appControl => 'App Control';
+
+  @override
+  String get appEnabled => 'App Enabled';
+
+  @override
+  String get forceUpdate => 'Force Update';
+
+  @override
+  String get maintenanceMessage =>
+      'App is in maintenance mode. Please try again later.';
+
+  @override
+  String get updateUrl => 'Update URL';
+
+  @override
+  String get updateMessage => 'Update Message';
+
+  @override
+  String get enterUrl => 'Please enter an update URL';
+
+  @override
+  String get configSaved => 'Config saved!';
+
+  @override
+  String get saveConfig => 'Save Config';
+
+  @override
+  String get unblockUser => 'Unblock User';
+
+  @override
+  String get blockUser => 'Block User';
+
+  @override
+  String get userBlocked => 'User has been blocked.';
+
+  @override
+  String get userUnblocked => 'User has been unblocked.';
+
+  @override
   String get reportReadyTitle => 'Report Ready';
 
   @override

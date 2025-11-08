@@ -1336,6 +1336,84 @@ abstract class AppLocalizations {
   /// **'Success'**
   String get success;
 
+  /// No description provided for @appControl.
+  ///
+  /// In en, this message translates to:
+  /// **'App Control'**
+  String get appControl;
+
+  /// No description provided for @appEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'App Enabled'**
+  String get appEnabled;
+
+  /// No description provided for @forceUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Force Update'**
+  String get forceUpdate;
+
+  /// No description provided for @maintenanceMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'App is in maintenance mode. Please try again later.'**
+  String get maintenanceMessage;
+
+  /// No description provided for @updateUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Update URL'**
+  String get updateUrl;
+
+  /// No description provided for @updateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Message'**
+  String get updateMessage;
+
+  /// No description provided for @enterUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an update URL'**
+  String get enterUrl;
+
+  /// No description provided for @configSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Config saved!'**
+  String get configSaved;
+
+  /// No description provided for @saveConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Config'**
+  String get saveConfig;
+
+  /// No description provided for @unblockUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock User'**
+  String get unblockUser;
+
+  /// No description provided for @blockUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Block User'**
+  String get blockUser;
+
+  /// No description provided for @userBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'User has been blocked.'**
+  String get userBlocked;
+
+  /// No description provided for @userUnblocked.
+  ///
+  /// In en, this message translates to:
+  /// **'User has been unblocked.'**
+  String get userUnblocked;
+
   /// No description provided for @reportReadyTitle.
   ///
   /// In en, this message translates to:

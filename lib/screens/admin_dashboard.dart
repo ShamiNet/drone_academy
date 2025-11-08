@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/screens/admin_app_control_panel.dart';
 import 'package:drone_academy/screens/manage_equipment_screen.dart';
 import 'package:drone_academy/screens/manage_inventory_screen.dart';
 import 'package:drone_academy/screens/manage_users_screen.dart';
@@ -41,7 +42,7 @@ class AdminDashboard extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
 
     return DefaultTabController(
-      length: 5,
+      length: 6, // زيادة العدد لاستيعاب التبويب الجديد
       child: Scaffold(
         appBar: AppBar(
           title: Text(l10n.adminDashboard),
@@ -96,6 +97,10 @@ class AdminDashboard extends StatelessWidget {
               Tab(text: l10n.users, icon: const Icon(Icons.people)),
               Tab(text: l10n.equipment, icon: const Icon(Icons.construction)),
               Tab(text: l10n.inventory, icon: const Icon(Icons.all_inbox)),
+              Tab(
+                text: l10n.appControl,
+                icon: const Icon(Icons.settings_applications),
+              ),
             ],
           ),
         ),
@@ -106,6 +111,7 @@ class AdminDashboard extends StatelessWidget {
             ManageUsersScreen(),
             ManageEquipmentScreen(),
             ManageInventoryScreen(),
+            AdminAppControlPanel(), // إضافة الواجهة الجديدة هنا
           ],
         ),
       ),
