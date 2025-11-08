@@ -207,6 +207,7 @@
     "analyzeNotesNow": "Анализировать заметки сейчас",
     "operations": "Операции",
     "success": "Успешно",
+    "reportGeneratedSuccessfully": "Отчет успешно создан.",
     "failed": "Ошибка",
     "exportFailed": "Экспорт не удался. Попробуйте еще раз.",
     "exportStarting": "Начинается экспорт...",

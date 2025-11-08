@@ -205,6 +205,7 @@
     "analyzeNotesNow": "Analyze Notes Now",
     "operations": "Operations",
     "success": "Success",
+    "reportGeneratedSuccessfully": "Report generated successfully.",
     "failed": "Failed",
     "exportFailed": "Export failed. Please try again.",
     "exportStarting": "Exporting...",

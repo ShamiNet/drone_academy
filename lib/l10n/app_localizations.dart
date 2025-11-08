@@ -1336,6 +1336,12 @@ abstract class AppLocalizations {
   /// **'Success'**
   String get success;
 
+  /// No description provided for @reportGeneratedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Report generated successfully.'**
+  String get reportGeneratedSuccessfully;
+
   /// No description provided for @failed.
   ///
   /// In en, this message translates to:

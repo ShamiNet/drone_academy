@@ -634,6 +634,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get success => 'نجاح';
 
   @override
+  String get reportGeneratedSuccessfully => 'تم إنشاء التقرير بنجاح.';
+
+  @override
   String get failed => 'فشل';
 
   @override

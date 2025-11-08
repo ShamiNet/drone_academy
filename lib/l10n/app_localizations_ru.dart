@@ -638,6 +638,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get success => 'Успешно';
 
   @override
+  String get reportGeneratedSuccessfully => 'Отчет успешно создан.';
+
+  @override
   String get failed => 'Ошибка';
 
   @override

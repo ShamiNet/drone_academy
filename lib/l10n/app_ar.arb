@@ -209,6 +209,8 @@
     "inventoryList": "قائمة المخزون",
     "selectTrainee": "اختر متدرباً",
     "success": "نجاح",
+    "reportGeneratedSuccessfully": "تم إنشاء التقرير بنجاح.",
+
     "failed": "فشل",
     "exportFailed": "فشل التصدير. حاول مرة أخرى.",
     "exportStarting": "جاري التصدير...",

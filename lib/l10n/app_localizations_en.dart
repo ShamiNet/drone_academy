@@ -634,6 +634,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get success => 'Success';
 
   @override
+  String get reportGeneratedSuccessfully => 'Report generated successfully.';
+
+  @override
   String get failed => 'Failed';
 
   @override
