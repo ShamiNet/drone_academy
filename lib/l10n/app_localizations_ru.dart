@@ -638,6 +638,32 @@ class AppLocalizationsRu extends AppLocalizations {
   String get success => 'Успешно';
 
   @override
+  String get reportReadyTitle => 'Отчет готов';
+
+  @override
+  String get reportSavedSuccessfully =>
+      'Report saved successfully in Downloads.';
+
+  @override
+  String get reportSavedSuccess => 'Отчет успешно сохранен в Скачиваниях.';
+
+  @override
+  String get reportReadyContent =>
+      'Ваш комплексный отчет был успешно создан. Теперь вы можете экспортировать или поделиться им по своему усмотрению.';
+
+  @override
+  String get export => 'Экспорт';
+
+  @override
+  String get share => 'Поделиться';
+
+  @override
+  String get saveToDownloads => 'Сохранить в Скачиваниях';
+
+  @override
+  String get previewAndPrint => 'Предпросмотр и печать';
+
+  @override
   String get reportGeneratedSuccessfully => 'Отчет успешно создан.';
 
   @override

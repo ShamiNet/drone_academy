@@ -9,9 +9,10 @@ import 'package:collection/collection.dart'; // مطلوب لـ groupBy
 
 // --- استيراد حزم إنشاء الـ PDF والطباعة ---
 import 'package:intl/intl.dart'; // مطلوب لتنسيق التاريخ
+import 'package:file_saver/file_saver.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw; // الاسم المستعار pw لـ widgets
-import 'package:printing/printing.dart'; // مطلوب لمعاينة الطباعة
+import 'package:printing/printing.dart'; // مطلوب لمعاينة الطباعة وخطوط جوجل
 
 // --- استيراد ملفات المشروع الداخلية ---
 import 'package:drone_academy/l10n/app_localizations.dart';
@@ -73,8 +74,6 @@ Future<List<String>?> _showTraineeSelectionDialog(
   BuildContext context,
   List<QueryDocumentSnapshot> trainees,
 ) async {
-  // ... (الكود الداخلي لهذه الدالة كما هو - لا يحتاج تتبع مفصل)
-  // ... (الكود محذوف للإيجاز، استخدم الكود الأصلي)
   // مجموعة (Set) لتخزين المعرفات المختارة لضمان عدم التكرار
   final selectedIds = <String>{};
   // متحكم لحقل البحث
@@ -439,23 +438,17 @@ Future<void> _runReportGeneration(
       ); // تتبع
       // إغلاق نافذة "جاري الإنشاء"
       Navigator.of(context).pop();
-
-      // !!! نقطة الدمج: استدعاء دالة إنشاء الـ PDF المحلية !!!
+      // !!! --- بداية التعديل --- !!!
+      // بدلاً من استدعاء دالة الطباعة مباشرة، نستدعي دالة الخيارات
       print(
-        '[PDF_TRACE] _runReportGeneration: بدء استدعاء _generateAndShowPdf...',
-      ); // تتبع
-      await _generateAndShowPdf(allTraineesData);
+        '[PDF_TRACE] _runReportGeneration: بدء استدعاء _handlePdfOutput...',
+      );
+      await _handlePdfOutput(context, allTraineesData, l10n);
+      // تم نقل كل منطق الإخراج (الحفظ/الطباعة/رسائل النجاح) إلى داخل _handlePdfOutput
+      // لذلك لا حاجة لأي كود إضافي هنا.
       print(
-        '[PDF_TRACE] _runReportGeneration: اكتمل استدعاء _generateAndShowPdf.',
-      ); // تتبع
-
-      if (context.mounted) {
-        // إظهار رسالة نجاح
-        print(
-          '[PDF_TRACE] _runReportGeneration: إظهار رسالة النجاح (Snackbar).',
-        ); // تتبع
-        showCustomSnackBar(context, l10n.reportGeneratedSuccessfully);
-      }
+        '[PDF_TRACE] _runReportGeneration: اكتملت عملية إنشاء التقرير بنجاح.',
+      );
     }
   } catch (e, s) {
     // إضافة 's' لرؤية StackTrace
@@ -474,130 +467,287 @@ Future<void> _runReportGeneration(
 }
 
 //======================================================================
-// القسم 3: دوال إنشاء وتصميم الـ PDF (من الكود الثاني)
+// القسم 3: دوال إنشاء وتصميم الـ PDF (نسخة مُحسّنة جمالياً)
 //======================================================================
 
-/// الدالة التي تنشئ ملف الـ PDF وتعرضه للمعاينة
-Future<void> _generateAndShowPdf(List<PdfReportData> allTraineesData) async {
-  print('[PDF_TRACE] _generateAndShowPdf: بدأت دالة إنشاء الـ PDF.'); // تتبع
+/// 1. الدالة التي تنظم الناتج: تنشئ الـ PDF وتُظهر نافذة الخيارات
+Future<void> _handlePdfOutput(
+  BuildContext context,
+  List<PdfReportData> allTraineesData,
+  AppLocalizations l10n, // نحتاج l10n لرسائل النجاح
+) async {
+  print('[PDF_TRACE] _handlePdfOutput: بدأت دالة معالجة الناتج.');
+
+  // --- 1. بناء مستند الـ PDF ---
   final doc = pw.Document();
-  // 1. تحميل الخط العربي من مجلد assets
-  print(
-    '[PDF_TRACE] _generateAndShowPdf: بدء تحميل الخط \'Cairo-Regular.ttf\'...',
-  ); // تتبع
-  final fontData = await rootBundle.load('assets/fonts/Cairo-Regular.ttf');
-  final ttf = pw.Font.ttf(fontData.buffer.asByteData());
-  print('[PDF_TRACE] _generateAndShowPdf: اكتمل تحميل الخط.'); // تتبع
+
+  // --- 1أ. تحميل الأصول (الخطوط، الأيقونات، الشعار) ---
+  print('[PDF_TRACE] _handlePdfOutput: بدء تحميل الخطوط والصور...');
+
+  // الخط الأساسي (تجوال عادي)
+  final pw.Font ttf = await PdfGoogleFonts.tajawalRegular();
+  // الخط العريض الأساسي (تجوال عريض)
+  final pw.Font ttfBold = await PdfGoogleFonts.tajawalBold();
+
+  // !!! --- هذا هو التعديل الجديد --- !!!
+  // تحميل خط "الأميري العريض" خصيصاً لعنوان التدريب
+  final pw.Font titleTrainingFont = await PdfGoogleFonts.amiriBold();
+
+  // ما زلنا نحتاج الشعار من الأصول
+  final logoData = await rootBundle.load('assets/images/academy_logo.png');
+  final logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+
+  // تحميل الأيقونات
+  final iconFont = await PdfGoogleFonts.materialIcons();
+  print('[PDF_TRACE] _handlePdfOutput: اكتمل تحميل الخطوط والصور.');
+
+  // --- 1ب. تعريف الألوان المتناسقة ---
+  final primaryColor = PdfColor.fromHex('#0D47A1'); // أزرق داكن
+  final secondaryColor = PdfColor.fromHex(
+    '#00796B',
+  ); // أخضر/تيال للبطاقة الثانية
+  final lightGreyColor = PdfColor.fromHex('#F4F4F4'); // خلفية الجداول والبطاقات
+  final titleColor = PdfColor.fromHex('#002171'); // لون العناوين (أغمق)
 
   final now = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
-  // المرور على بيانات كل متدرب وإنشاء صفحة له
-  print(
-    '[PDF_TRACE] _generateAndShowPdf: بدء إنشاء الصفحات لـ ${allTraineesData.length} متدرب...',
-  ); // تتبع
+  print('[PDF_TRACE] _handlePdfOutput: بدء إنشاء صفحات الـ PDF...');
   for (var traineeData in allTraineesData) {
-    print(
-      '[PDF_TRACE] \t... إضافة صفحة للمتدرب: ${traineeData.traineeName}',
-    ); // تتبع
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        // 2. تحديد اتجاه الصفحة من اليمين لليسار
         textDirection: pw.TextDirection.rtl,
-        theme: pw.ThemeData.withFont(base: ttf, bold: ttf),
-        // 3. بناء رأس الصفحة (Header)
-        header: (pw.Context context) =>
-            _buildPdfHeader(now: now, traineeName: traineeData.traineeName),
-        // 4. بناء محتوى الصفحة (Body)
-        build: (pw.Context context) {
-          print(
-            '[PDF_TRACE] \t\t... بناء محتوى (body) لـ ${traineeData.traineeName}',
-          ); // تتبع
-          return _buildPdfBody(
-            levelProgress: traineeData.levelProgress,
-            aiSummary: traineeData.aiSummary,
-            averageMastery: traineeData.averageMastery,
-            results: traineeData.results,
-            notes: traineeData.notes,
-          );
-        },
+        theme: pw.ThemeData.withFont(
+          base: ttf, // <-- استخدام الخط العادي (تجوال)
+          bold: ttfBold, // <-- استخدام الخط العريض (تجوال)
+          icons: iconFont,
+        ),
+        header: (pw.Context context) => _buildPdfHeader(
+          now: now,
+          traineeName: traineeData.traineeName,
+          logoImage: logoImage,
+          primaryColor: primaryColor,
+        ),
+        build: (pw.Context context) => _buildPdfBody(
+          levelProgress: traineeData.levelProgress,
+          aiSummary: traineeData.aiSummary,
+          averageMastery: traineeData.averageMastery,
+          results: traineeData.results,
+          notes: traineeData.notes,
+          titleColor: titleColor,
+          primaryColor: primaryColor,
+          secondaryColor: secondaryColor,
+          lightGreyColor: lightGreyColor,
+          // !!! --- تمرير الخط الجديد --- !!!
+          titleTrainingFont: titleTrainingFont,
+        ),
       ),
     );
   }
-  print('[PDF_TRACE] _generateAndShowPdf: اكتمل بناء جميع الصفحات.'); // تتبع
+  print('[PDF_TRACE] _handlePdfOutput: اكتمل بناء الصفحات.');
 
-  // 5. عرض نافذة معاينة الطباعة
-  print(
-    '[PDF_TRACE] _generateAndShowPdf: بدء استدعاء Printing.layoutPdf (نافذة المعاينة)...',
-  ); // تتبع
-  await Printing.layoutPdf(
-    onLayout: (PdfPageFormat format) async => doc.save(),
+  // --- 2. تحويل الـ PDF إلى بيانات (Bytes) ---
+  print('[PDF_TRACE] _handlePdfOutput: بدء حفظ الـ PDF إلى bytes...');
+  final Uint8List bytes = await doc.save();
+  print('[PDF_TRACE] _handlePdfOutput: اكتمل حفظ الـ PDF إلى bytes.');
+
+  // --- 3. إظهار نافذة الخيارات للمستخدم ---
+  if (!context.mounted) return;
+  print('[PDF_TRACE] _handlePdfOutput: إظهار نافذة الخيارات (حفظ / طباعة)...');
+  await showDialog(
+    context: context,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        title: Text(l10n.reportReadyTitle), // "اكتمل إنشاء التقرير"
+        content: Text(l10n.reportReadyContent), // "ماذا تريد أن تفعل؟"
+        actions: [
+          // زر الحفظ
+          TextButton(
+            child: Text(l10n.saveToDownloads), // "حفظ في التنزيلات"
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              print('[PDF_TRACE] _handlePdfOutput: المستخدم اختار "حفظ".');
+              _savePdfToDownloads(context, bytes, l10n);
+            },
+          ),
+          // زر المعاينة
+          ElevatedButton(
+            child: Text(l10n.previewAndPrint), // "معاينة وطباعة"
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              print('[PDF_TRACE] _handlePdfOutput: المستخدم اختار "معاينة".');
+              _showPrintPreview(bytes, l10n);
+            },
+          ),
+        ],
+      );
+    },
   );
-  print(
-    '[PDF_TRACE] _generateAndShowPdf: اكتمل استدعاء Printing.layoutPdf.',
-  ); // تتبع
 }
 
-/// ودجت لبناء رأس الصفحة (Header)
-pw.Widget _buildPdfHeader({required String now, required String traineeName}) {
-  // هذه الدالة سريعة ولا تحتاج تتبع
+/// 2. الدالة الخاصة بـ "الحفظ في التنزيلات" (كما هي)
+Future<void> _savePdfToDownloads(
+  BuildContext context,
+  Uint8List bytes,
+  AppLocalizations l10n,
+) async {
+  print(
+    '[PDF_TRACE] _savePdfToDownloads: بدء عملية الحفظ المباشر (بدون طلب إذن)...',
+  );
+  try {
+    // 2. إنشاء اسم فريد للملف
+    final String fileName =
+        'Trainee_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}';
+
+    // 3. استدعاء saveFile مباشرة
+    String? path = await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: bytes,
+      fileExtension: 'pdf',
+      mimeType: MimeType.pdf,
+    );
+
+    // 4. التحقق مما إذا كان المسار صالحاً
+    if (path != null) {
+      print(
+        '[PDF_TRACE] _savePdfToDownloads: اكتمل حفظ الملف بنجاح في المسار العام: $path',
+      );
+      if (context.mounted) {
+        showCustomSnackBar(
+          context,
+          l10n.reportSavedSuccess, // "تم حفظ التقرير في مجلد التنزيلات"
+          isError: false,
+        );
+      }
+    } else {
+      print(
+        '[PDF_TRACE_ERROR] _savePdfToDownloads: فشل الحفظ (أرجعت الحزمة null).',
+      );
+      if (context.mounted) {
+        showCustomSnackBar(context, l10n.reportGenerationFailed);
+      }
+    }
+  } catch (e) {
+    print('[PDF_TRACE_ERROR] _savePdfToDownloads: فشل حفظ الملف بسبب خطأ: $e');
+    if (context.mounted) {
+      showCustomSnackBar(context, "${l10n.reportGenerationFailed}: $e");
+    }
+  }
+}
+
+/// 3. الدالة الخاصة بـ "معاينة وطباعة" (كما هي)
+Future<void> _showPrintPreview(Uint8List bytes, AppLocalizations l10n) async {
+  print('[PDF_TRACE] _showPrintPreview: بدء استدعاء Printing.layoutPdf...');
+  await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => bytes);
+  print('[PDF_TRACE] _showPrintPreview: اكتمل استدعاء Printing.layoutPdf.');
+}
+
+//======================================================================
+// القسم 4: دوال بناء واجهة الـ PDF (مُعاد تصميمها)
+//======================================================================
+
+/// ودجت لبناء رأس الصفحة (Header) - تصميم جديد
+pw.Widget _buildPdfHeader({
+  required String now,
+  required String traineeName,
+  required pw.ImageProvider logoImage,
+  required PdfColor primaryColor,
+}) {
   return pw.Column(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
+      // --- الصف العلوي: الشعار والتاريخ ---
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            'تقرير أداء المتدرب',
-            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-          ),
+          // التاريخ (على اليسار في RTL)
           pw.Text('تاريخ التقرير: $now'),
+          // الشعار (على اليمين في RTL)
+          pw.Container(height: 50, child: pw.Image(logoImage)),
         ],
       ),
-      pw.SizedBox(height: 8),
-      pw.Text('المتدرب: $traineeName', style: const pw.TextStyle(fontSize: 18)),
-      pw.Divider(height: 24),
+      pw.SizedBox(height: 16),
+      // --- شريط العنوان الملون ---
+      pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: pw.BoxDecoration(
+          color: primaryColor,
+          borderRadius: pw.BorderRadius.circular(5),
+        ),
+        alignment: pw.Alignment.centerRight,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'تقرير أداء المتدرب',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'المتدرب: $traineeName',
+              style: const pw.TextStyle(fontSize: 18, color: PdfColors.white),
+            ),
+          ],
+        ),
+      ),
+      pw.SizedBox(height: 24), // كان Divider
     ],
   );
 }
 
-/// ودجت مشترك لبناء محتوى الصفحة (Body)
+/// ودجت مشترك لبناء محتوى الصفحة (Body) - تصميم جديد
 List<pw.Widget> _buildPdfBody({
   required LevelProgress? levelProgress,
   required double? averageMastery,
   required String? aiSummary,
   required List<QueryDocumentSnapshot> results,
   required List<QueryDocumentSnapshot> notes,
+  // الألوان والأيقونات
+  required PdfColor titleColor,
+  required PdfColor primaryColor,
+  required PdfColor secondaryColor,
+  required PdfColor lightGreyColor,
+  // !!! --- هذا هو المتغير الجديد الذي يجب تمريره --- !!!
+  required pw.Font titleTrainingFont,
 }) {
-  // هذه الدالة سريعة ولا تحتاج تتبع مفصل
   return [
-    // ... (الكود الداخلي لهذه الدالة كما هو - لا يحتاج تتبع مفصل)
-    // ... (الكود محذوف للإيجاز، استخدم الكود الأصلي)
-    // --- قسم الإحصائيات العامة ---
+    // --- القسم 1: بطاقات الإحصائيات ---
     pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
       children: [
+        // بطاقة المستوى
         if (levelProgress != null)
-          pw.Text(
-            'المستوى الحالي: ${levelProgress.level}',
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          _buildStatCard(
+            title: 'المستوى الحالي',
+            value: '${levelProgress.level}',
+            // استخدمنا رمز 'leaderboard' من Material Icons
+            icon: const pw.IconData(0xe31b),
+            color: primaryColor,
           ),
+        // بطاقة متوسط الإتقان
         if (averageMastery != null)
-          pw.Text(
-            'متوسط الإتقان العام: ${averageMastery.toStringAsFixed(1)}%',
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          _buildStatCard(
+            title: 'متوسط الإتقان العام',
+            value: '${averageMastery.toStringAsFixed(1)}%',
+            // استخدمنا رمز 'star'
+            icon: const pw.IconData(0xe838),
+            color: secondaryColor,
           ),
       ],
     ),
     pw.SizedBox(height: 16),
 
-    // --- قسم إحصائيات المستوى ---
+    // --- قسم إحصائيات المستوى (المتبقي والمكتمل) ---
     if (levelProgress != null) ...[
-      pw.Text(
-        'إحصائيات المستوى الحالي (${levelProgress.level})',
-        style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+      // استخدام الدالة المساعدة لعنوان القسم
+      _buildSectionTitle(
+        title: 'إحصائيات المستوى الحالي (${levelProgress.level})',
+        color: titleColor,
       ),
-      pw.SizedBox(height: 8),
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
         children: [
@@ -606,75 +756,147 @@ List<pw.Widget> _buildPdfBody({
           pw.Text('الإجمالي: ${levelProgress.totalTrainingsInLevel}'),
         ],
       ),
-      pw.SizedBox(height: 16),
+      pw.SizedBox(height: 24),
     ],
 
-    // --- قسم تحليل الذكاء الاصطناعي (يظهر فقط إذا كان موجوداً) ---
+    // --- قسم تحليل الذكاء الاصطناعي ---
     if (aiSummary != null && aiSummary.isNotEmpty) ...[
-      pw.Text(
-        'تحليل الأداء (AI):',
-        style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-      ),
-      pw.SizedBox(height: 8),
+      _buildSectionTitle(title: 'تحليل الأداء (AI)', color: titleColor),
       pw.Container(
         padding: const pw.EdgeInsets.all(10),
         decoration: pw.BoxDecoration(
-          border: pw.Border.all(color: PdfColors.grey),
+          border: pw.Border.all(color: PdfColors.grey300),
           borderRadius: pw.BorderRadius.circular(5),
+          color: lightGreyColor, // خلفية رمادية فاتحة
         ),
         child: pw.Text(
           aiSummary.replaceAll('**', ''), // إزالة علامات التنسيق
           style: const pw.TextStyle(lineSpacing: 2),
         ),
       ),
-      pw.SizedBox(height: 16),
+      pw.SizedBox(height: 24),
     ],
 
-    // --- قسم النتائج ---
-    pw.Text(
-      'سجل النتائج:',
-      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-    ),
-    pw.SizedBox(height: 8),
+    // --- قسم النتائج (جدول ملون) ---
+    _buildSectionTitle(title: 'سجل النتائج', color: titleColor),
     if (results.isNotEmpty)
-      pw.Table.fromTextArray(
-        headers: ['التاريخ', 'نسبة الإتقان', 'عنوان التدريب'],
-        data: results.map((result) {
-          final date = (result['date'] as Timestamp).toDate();
-          final formattedDate = DateFormat.yMMMd().format(date);
-          return [
-            formattedDate,
-            '${result['masteryPercentage']}%',
-            result['trainingTitle'],
-          ];
-        }).toList(),
-        border: pw.TableBorder.all(),
-        headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-        cellStyle: const pw.TextStyle(),
-        cellAlignment: pw.Alignment.centerRight,
-        headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+      // استخدام pw.Table بدلاً من Table.fromTextArray للتحكم الكامل
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400),
+        // تحديد عرض الأعمدة
+        columnWidths: {
+          0: const pw.FlexColumnWidth(1.5),
+          1: const pw.FlexColumnWidth(1.5),
+          2: const pw.FlexColumnWidth(3),
+        },
+        children: [
+          // --- صف الرأس (Header) ---
+          pw.TableRow(
+            decoration: pw.BoxDecoration(color: lightGreyColor),
+            children: ['التاريخ', 'نسبة الإتقان', 'عنوان التدريب'].map((
+              header,
+            ) {
+              return pw.Padding(
+                padding: const pw.EdgeInsets.all(8),
+                child: pw.Text(
+                  header,
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  textAlign: pw.TextAlign.right,
+                ),
+              );
+            }).toList(),
+          ),
+          // --- صفوف البيانات (مع تلوين متبادل) ---
+          ...results.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final result = entry.value;
+            final bool isEven = index % 2 == 0;
+            final date = (result['date'] as Timestamp).toDate();
+            final formattedDate = DateFormat.yMMMd().format(date);
+
+            // !!! --- هذا هو التعديل المطلوب --- !!!
+            return pw.TableRow(
+              // التلوين المتبادل (Zebra-striping)
+              decoration: pw.BoxDecoration(
+                color: isEven ? PdfColors.white : lightGreyColor,
+              ),
+              // بناء الخلايا يدوياً لتطبيق التنسيق
+              children: [
+                // الخلية 1: التاريخ (تنسيق عادي)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(formattedDate, textAlign: pw.TextAlign.right),
+                ),
+                // الخلية 2: النسبة (تنسيق عادي)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    '${result['masteryPercentage']}%',
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
+                // الخلية 3: عنوان التدريب (تنسيق مميز بخط مختلف)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    result['trainingTitle'],
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(
+                      font: titleTrainingFont, // <-- استخدام الخط المخصص
+                      color: primaryColor, // <-- اللون المختلف
+                      // لا نحتاج "bold" لأن الخط هو "Amiri-Bold" أصلاً
+                    ),
+                  ),
+                ),
+              ],
+            );
+            // !!! --- نهاية التعديل --- !!!
+          }),
+        ],
       )
     else
       pw.Text('لا توجد نتائج مسجلة.'),
-    pw.SizedBox(height: 16),
+    pw.SizedBox(height: 24),
 
-    // --- قسم الملاحظات اليومية ---
-    pw.Text(
-      'الملاحظات اليومية:',
-      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-    ),
-    pw.SizedBox(height: 8),
+    // --- قسم الملاحظات اليومية (تصميم بطاقات) ---
+    _buildSectionTitle(title: 'الملاحظات اليومية', color: titleColor),
     if (notes.isNotEmpty)
       ...notes.map((note) {
         final date = (note['date'] as Timestamp).toDate();
         final formattedDate = DateFormat.yMMMd().format(date);
         return pw.Container(
-          margin: const pw.EdgeInsets.only(bottom: 8),
+          margin: const pw.EdgeInsets.only(bottom: 10),
+          padding: const pw.EdgeInsets.all(12),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey300),
+            borderRadius: pw.BorderRadius.circular(5),
+            color: PdfColors.white, // يمكنك تغييرها إلى lightGreyColor إذا أردت
+          ),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('$formattedDate: ${note['note']}'),
-              pw.Divider(color: PdfColors.grey400),
+              // صف التاريخ مع أيقونة
+              pw.Row(
+                children: [
+                  // رمز 'calendar_today'
+                  pw.Icon(
+                    const pw.IconData(0xe8df),
+                    size: 16,
+                    color: PdfColors.grey700,
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Text(
+                    formattedDate,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 8),
+              // نص الملاحظة
+              pw.Text(note['note']),
             ],
           ),
         );
@@ -682,4 +904,74 @@ List<pw.Widget> _buildPdfBody({
     else
       pw.Text('لا توجد ملاحظات مسجلة.'),
   ];
+}
+//======================================================================
+// القسم 5: دوال مساعدة جديدة للتصميم
+//======================================================================
+
+/// دالة مساعدة لبناء بطاقة إحصائيات (Stat Card)
+pw.Widget _buildStatCard({
+  required String title,
+  required String value,
+  required pw.IconData icon,
+  required PdfColor color,
+}) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.all(12),
+    decoration: pw.BoxDecoration(
+      color: color,
+      borderRadius: pw.BorderRadius.circular(8),
+    ),
+    child: pw.Row(
+      mainAxisSize: pw.MainAxisSize.min, // لجعل البطاقة تحتضن المحتوى
+      children: [
+        // الأيقونة
+        pw.Icon(icon, size: 28, color: PdfColors.white),
+        pw.SizedBox(width: 12),
+        // النص
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              title,
+              style: const pw.TextStyle(color: PdfColors.white, fontSize: 12),
+            ),
+            pw.Text(
+              value,
+              style: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+/// دالة مساعدة لبناء عنوان قسم (Section Title)
+pw.Widget _buildSectionTitle({required String title, required PdfColor color}) {
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text(
+        title,
+        style: pw.TextStyle(
+          fontSize: 18,
+          fontWeight: pw.FontWeight.bold,
+          color: color, // استخدام اللون الممرر
+        ),
+      ),
+      pw.SizedBox(height: 4),
+      // الخط السفلي الملون
+      pw.Container(
+        height: 3,
+        width: 70, // عرض ثابت
+        color: color.shade(0.3), // استخدام درجة أفتح من اللون
+      ),
+      pw.SizedBox(height: 16),
+    ],
+  );
 }

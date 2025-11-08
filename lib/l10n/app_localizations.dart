@@ -1336,6 +1336,54 @@ abstract class AppLocalizations {
   /// **'Success'**
   String get success;
 
+  /// No description provided for @reportReadyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report Ready'**
+  String get reportReadyTitle;
+
+  /// No description provided for @reportSavedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Report saved successfully in Downloads.'**
+  String get reportSavedSuccessfully;
+
+  /// No description provided for @reportSavedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Report saved successfully in Downloads.'**
+  String get reportSavedSuccess;
+
+  /// No description provided for @reportReadyContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Your comprehensive report has been generated successfully. You can now export or share it as you wish.'**
+  String get reportReadyContent;
+
+  /// No description provided for @export.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get export;
+
+  /// No description provided for @share.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get share;
+
+  /// No description provided for @saveToDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to Downloads'**
+  String get saveToDownloads;
+
+  /// No description provided for @previewAndPrint.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview and Print'**
+  String get previewAndPrint;
+
   /// No description provided for @reportGeneratedSuccessfully.
   ///
   /// In en, this message translates to:

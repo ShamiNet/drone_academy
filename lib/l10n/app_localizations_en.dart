@@ -634,6 +634,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get success => 'Success';
 
   @override
+  String get reportReadyTitle => 'Report Ready';
+
+  @override
+  String get reportSavedSuccessfully =>
+      'Report saved successfully in Downloads.';
+
+  @override
+  String get reportSavedSuccess => 'Report saved successfully in Downloads.';
+
+  @override
+  String get reportReadyContent =>
+      'Your comprehensive report has been generated successfully. You can now export or share it as you wish.';
+
+  @override
+  String get export => 'Export';
+
+  @override
+  String get share => 'Share';
+
+  @override
+  String get saveToDownloads => 'Save to Downloads';
+
+  @override
+  String get previewAndPrint => 'Preview and Print';
+
+  @override
   String get reportGeneratedSuccessfully => 'Report generated successfully.';
 
   @override

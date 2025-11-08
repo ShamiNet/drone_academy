@@ -634,6 +634,31 @@ class AppLocalizationsAr extends AppLocalizations {
   String get success => 'نجاح';
 
   @override
+  String get reportReadyTitle => 'التقرير جاهز';
+
+  @override
+  String get reportSavedSuccessfully => 'تم حفظ التقرير بنجاح في التنزيلات.';
+
+  @override
+  String get reportSavedSuccess => 'Report saved successfully in Downloads.';
+
+  @override
+  String get reportReadyContent =>
+      'تم إنشاء تقريرك الشامل بنجاح. يمكنك الآن تصديره أو مشاركته حسب رغبتك.';
+
+  @override
+  String get export => 'تصدير';
+
+  @override
+  String get share => 'Share';
+
+  @override
+  String get saveToDownloads => 'حفظ في التنزيلات';
+
+  @override
+  String get previewAndPrint => 'معاينة و طباعة';
+
+  @override
   String get reportGeneratedSuccessfully => 'تم إنشاء التقرير بنجاح.';
 
   @override
