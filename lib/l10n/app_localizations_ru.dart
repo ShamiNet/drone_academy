@@ -402,7 +402,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get selectLanguage => 'Выберите язык';
 
   @override
-  String get videoThumbnail => 'Video Thumbnail';
+  String get videoThumbnail => 'Миниатюра видео';
 
   @override
   String get analyzing => 'Анализируется...';
@@ -641,8 +641,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reportReadyTitle => 'Отчет готов';
 
   @override
-  String get reportSavedSuccessfully =>
-      'Report saved successfully in Downloads.';
+  String get reportSavedSuccessfully => 'Отчет успешно сохранен в Скачиваниях.';
 
   @override
   String get reportSavedSuccess => 'Отчет успешно сохранен в Скачиваниях.';

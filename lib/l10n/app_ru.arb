@@ -210,6 +210,7 @@
     "previewAndPrint": "Предпросмотр и печать",
     "reportReadyTitle": "Отчет готов",
     "reportSavedSuccess": "Отчет успешно сохранен в Скачиваниях.",
+    "reportSavedSuccessfully": "Отчет успешно сохранен в Скачиваниях.",
     "reportReadyContent": "Ваш комплексный отчет был успешно создан. Теперь вы можете экспортировать или поделиться им по своему усмотрению.",
     "analyzeNotesNow": "Анализировать заметки сейчас",
     "operations": "Операции",
@@ -229,5 +230,6 @@
     "reportGenerationFailed": "Не удалось создать отчет. Попробуйте еще раз.",
     "generatingComprehensiveReport": "Генерация комплексного отчета. Это может занять несколько минут...",
     "showOnlyWithResults": "Показывать только тренировки с результатами",
-    "negativeQuantityError": "Количество не может быть отрицательным."
+    "negativeQuantityError": "Количество не может быть отрицательным.",
+    "videoThumbnail": "Миниатюра видео"
 }

@@ -16,11 +16,13 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     Timer(const Duration(seconds: 3), () {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => AuthGate(setLocale: widget.setLocale),
-        ),
-      );
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => AuthGate(setLocale: widget.setLocale),
+          ),
+        );
+      }
     });
   }
 

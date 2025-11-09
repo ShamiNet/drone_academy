@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/screens/manage_banned_users_screen.dart';
 import 'package:drone_academy/screens/manage_equipment_screen.dart';
 import 'package:drone_academy/screens/manage_inventory_screen.dart';
 import 'package:drone_academy/screens/manage_users_screen.dart';
@@ -69,6 +69,19 @@ class AdminDashboard extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) => const UserOrgChartScreen(),
+                  ),
+                );
+              },
+            ),
+            // زر إدارة حظر المستخدمين
+            IconButton(
+              icon: const Icon(Icons.block),
+              tooltip: 'إدارة حظر المستخدمين',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ManageBannedUsersScreen(),
                   ),
                 );
               },

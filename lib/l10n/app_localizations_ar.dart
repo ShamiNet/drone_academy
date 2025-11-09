@@ -399,7 +399,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get selectLanguage => 'اختر اللغة';
 
   @override
-  String get videoThumbnail => 'Video Thumbnail';
+  String get videoThumbnail => 'صورة مصغرة للفيديو';
 
   @override
   String get analyzing => 'جاري التحليل...';
@@ -546,7 +546,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get totalQuantity => 'الكمية الإجمالية';
 
   @override
-  String get availableQuantity => 'Available Quantity';
+  String get availableQuantity => 'الكمية المتاحة';
 
   @override
   String get noInventoryItems => 'لا توجد قطع في المخزون.';
@@ -640,7 +640,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reportSavedSuccessfully => 'تم حفظ التقرير بنجاح في التنزيلات.';
 
   @override
-  String get reportSavedSuccess => 'Report saved successfully in Downloads.';
+  String get reportSavedSuccess => 'تم حفظ التقرير بنجاح في التنزيلات.';
 
   @override
   String get reportReadyContent =>
@@ -650,7 +650,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get export => 'تصدير';
 
   @override
-  String get share => 'Share';
+  String get share => 'مشاركة';
 
   @override
   String get saveToDownloads => 'حفظ في التنزيلات';

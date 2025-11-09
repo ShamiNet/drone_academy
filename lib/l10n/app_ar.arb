@@ -210,7 +210,9 @@
     "selectTrainee": "اختر متدرباً",
     "success": "نجاح",
     "reportSavedSuccessfully": "تم حفظ التقرير بنجاح في التنزيلات.",
+    "reportSavedSuccess": "تم حفظ التقرير بنجاح في التنزيلات.",
     "export": "تصدير",
+    "share": "مشاركة",
     "reportGeneratedSuccessfully": "تم إنشاء التقرير بنجاح.",
     "reportReadyTitle": "التقرير جاهز",
     "reportReadyContent": "تم إنشاء تقريرك الشامل بنجاح. يمكنك الآن تصديره أو مشاركته حسب رغبتك.",
@@ -228,5 +230,7 @@
     "reportGenerationFailed": "فشل في إنشاء التقرير. حاول مرة أخرى.",
     "generatingComprehensiveReport": "جاري إنشاء التقرير الشامل. قد يستغرق الأمر بضع دقائق...",
     "showOnlyWithResults": "عرض التدريبات التي تحتوي على نتائج فقط",
-    "moveToBottom": "نقل للأسفل"
+    "moveToBottom": "نقل للأسفل",
+    "videoThumbnail": "صورة مصغرة للفيديو",
+    "availableQuantity": "الكمية المتاحة"
 }

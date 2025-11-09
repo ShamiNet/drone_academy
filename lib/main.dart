@@ -1,6 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/splash_screen.dart';
+import 'package:drone_academy/screens/force_update_screen.dart';
+import 'package:drone_academy/screens/banned_user_screen.dart';
+import 'package:drone_academy/services/update_service.dart';
+import 'package:drone_academy/services/ban_check_service.dart';
 import 'package:drone_academy/services/notification_service.dart';
 import 'package:drone_academy/theme/app_theme.dart'; // 1. استيراد ملف الثيم
 import 'package:firebase_core/firebase_core.dart';
@@ -29,6 +33,15 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   Locale? _locale;
+  bool _updateRequired = false;
+  bool _userBanned = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUpdate();
+    _checkBanStatus();
+  }
 
   void setLocale(Locale locale) {
     setState(() {
@@ -36,14 +49,53 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  Future<void> _checkUpdate() async {
+    try {
+      print('🚀 Starting update check in main.dart...');
+      final updateService = UpdateService();
+      final required = await updateService.isUpdateRequired();
+      print('🎯 Update check result: $required');
+      if (required && mounted) {
+        print('⚠️ Setting _updateRequired to true');
+        setState(() {
+          _updateRequired = true;
+        });
+      } else {
+        print('✅ No update required, continuing normally');
+      }
+    } catch (e) {
+      print('❌ Error in _checkUpdate: $e');
+      // Continue without forcing update if there's an error
+    }
+  }
+
+  Future<void> _checkBanStatus() async {
+    try {
+      print('🚀 Starting ban status check in main.dart...');
+      final banCheckService = BanCheckService();
+      final banned = await banCheckService.isUserBanned();
+      print('🎯 Ban check result: $banned');
+      if (banned && mounted) {
+        print('🚫 Setting _userBanned to true');
+        setState(() {
+          _userBanned = true;
+        });
+      } else {
+        print('✅ User not banned, continuing normally');
+      }
+    } catch (e) {
+      print('❌ Error in _checkBanStatus: $e');
+      // Continue without blocking if there's an error
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Drone Academy',
-      theme: AppTheme.lightTheme, // 2. تطبيق الثيم العادي
-      darkTheme: AppTheme.darkTheme, // 3. تطبيق الثيم الليلي
-      themeMode:
-          ThemeMode.system, // 4. جعل التطبيق يتبع إعدادات الهاتف تلقائياً
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
       locale: _locale,
       supportedLocales: [Locale('en'), Locale('ar'), Locale('ru')],
       localizationsDelegates: [
@@ -52,7 +104,16 @@ class _MyAppState extends State<MyApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: SplashScreen(setLocale: setLocale),
+      home: _userBanned
+          ? BannedUserScreen()
+          : _updateRequired
+          ? ForceUpdateScreen(
+              storeUrl:
+                  'https://play.google.com/store/apps/details?id=com.yourcompany.drone_academy',
+              message:
+                  'يجب عليك تحديث التطبيق للاستمرار في استخدام جميع الميزات. اضغط على زر التحديث للانتقال إلى المتجر.',
+            )
+          : SplashScreen(setLocale: setLocale),
     );
   }
 }
