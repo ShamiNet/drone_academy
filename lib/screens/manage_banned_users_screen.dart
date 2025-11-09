@@ -37,8 +37,22 @@ class _ManageBannedUsersScreenState extends State<ManageBannedUsersScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Chip(
-                      avatar: const Icon(Icons.block, size: 18),
-                      label: Text('$bannedCount'),
+                      avatar: Icon(
+                        Icons.block,
+                        size: 18,
+                        color: bannedCount > 0
+                            ? Colors.red.shade700
+                            : Colors.grey.shade600,
+                      ),
+                      label: Text(
+                        '$bannedCount',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: bannedCount > 0
+                              ? Colors.red.shade900
+                              : Colors.grey.shade800,
+                        ),
+                      ),
                       backgroundColor: bannedCount > 0
                           ? Colors.red.shade100
                           : Colors.grey.shade200,
@@ -199,14 +213,26 @@ class _ManageBannedUsersScreenState extends State<ManageBannedUsersScreen> {
                                 const SizedBox(width: 8),
                                 if (user.isBanned)
                                   Chip(
-                                    label: const Text(
+                                    label: Text(
                                       'محظور',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.white,
+                                        // استخدم لون الخط الرئيسي للتحذير بدل الأبيض لضمان الوضوح في الوضع النهاري
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    backgroundColor: Colors.red,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.errorContainer,
+                                    side: BorderSide(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                      width: 1,
+                                    ),
                                     padding: EdgeInsets.zero,
                                     materialTapTargetSize:
                                         MaterialTapTargetSize.shrinkWrap,

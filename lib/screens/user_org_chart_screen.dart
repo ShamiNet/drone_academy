@@ -400,6 +400,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-user-org-chart',
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const AddUserScreen()),
@@ -582,6 +583,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
                       top: 10,
                       right: 10,
                       child: FloatingActionButton(
+                        heroTag: 'fab-user-org-chart-mini',
                         mini: true,
                         tooltip: l10n.recenterView,
                         onPressed: () {

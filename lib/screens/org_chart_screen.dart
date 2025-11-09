@@ -393,6 +393,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
                 top: 10,
                 right: 10,
                 child: FloatingActionButton(
+                  heroTag: 'fab-org-chart-mini',
                   mini: true,
                   tooltip: 'Recenter View',
                   onPressed: () {
@@ -406,6 +407,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-org-chart',
         onPressed: () => _showEditOrAddNodeDialog(parentNodeId: ''),
         child: const Icon(Icons.add),
         tooltip: l10n.addRootNode,
