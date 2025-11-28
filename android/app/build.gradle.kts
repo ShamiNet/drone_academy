@@ -15,11 +15,17 @@ android {
         // Roll back to Java 11 since local JDK 17 isn't available; still supported by AGP 8.x
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // 👇👇👇 أضف هذا السطر هنا 👇👇👇
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
+<<<<<<< HEAD
         // Align JVM target with Java 11 for compatibility
         jvmTarget = JavaVersion.VERSION_11.toString()
+=======
+        jvmTarget = "11"
+>>>>>>> a60abdd4e0a3e993b327c621c146fc1992539f23
     }
 
     defaultConfig {
@@ -31,7 +37,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        multiDexEnabled = true // <-- أضف هذا السطر
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -43,10 +49,27 @@ android {
     }
 }
 
+<<<<<<< HEAD
 // (Optional) Toolchain config removed due to missing JDK 17; Gradle will use installed JDK.
+=======
+// 👇👇👇 أضف هذا الجزء الجديد لإصلاح تعارض الإصدارات 👇👇👇
+configurations.all {
+    resolutionStrategy {
+        // نجبر النظام على استخدام نسخ مستقرة لا تطلب Gradle 8.9.1
+        force("androidx.browser:browser:1.8.0")
+        force("androidx.core:core-ktx:1.13.1")
+        force("androidx.core:core:1.13.1")
+        force("androidx.activity:activity:1.9.0")
+    }
+}
+// 👆👆👆 نهاية الجزء الجديد 👆👆👆
+
+
+>>>>>>> a60abdd4e0a3e993b327c621c146fc1992539f23
 dependencies {
   // Import the Firebase BoM
-  implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+  implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
+  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
   implementation("androidx.appcompat:appcompat:1.6.1")
 
 

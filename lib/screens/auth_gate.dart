@@ -13,13 +13,30 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // If the user is not logged in, go to the login screen
-        if (!snapshot.hasData) {
+        // [DEBUG] طباعة حالة المراقب
+        debugPrint(
+          '🔐 [AUTH GATE] ConnectionState: ${snapshot.connectionState}',
+        );
+
+        // في حالة الانتظار (أول لحظة)، اعرض دائرة تحميل
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasData && snapshot.data != null) {
+          debugPrint(
+            '🔐 [AUTH GATE] User Detected: ${snapshot.data!.uid} -> Going to Home',
+          );
+          return HomeScreen(setLocale: setLocale);
+        } else {
+          debugPrint('🔐 [AUTH GATE] No User -> Going to Login');
           return const LoginScreen();
         }
 
         // If the user is logged in, go to the home screen
-        return HomeScreen(setLocale: setLocale, setThemeMode: setThemeMode);
+        return HomeScreen(setLocale: setLocale);
       },
     );
   }
