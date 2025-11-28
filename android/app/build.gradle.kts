@@ -14,10 +14,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // 👇👇👇 أضف هذا السطر هنا 👇👇👇
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = "11"
     }
 
     defaultConfig {
@@ -29,7 +31,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        multiDexEnabled = true // <-- أضف هذا السطر
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -40,9 +42,24 @@ android {
         }
     }
 }
+
+// 👇👇👇 أضف هذا الجزء الجديد لإصلاح تعارض الإصدارات 👇👇👇
+configurations.all {
+    resolutionStrategy {
+        // نجبر النظام على استخدام نسخ مستقرة لا تطلب Gradle 8.9.1
+        force("androidx.browser:browser:1.8.0")
+        force("androidx.core:core-ktx:1.13.1")
+        force("androidx.core:core:1.13.1")
+        force("androidx.activity:activity:1.9.0")
+    }
+}
+// 👆👆👆 نهاية الجزء الجديد 👆👆👆
+
+
 dependencies {
   // Import the Firebase BoM
-  implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+  implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
+  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
   implementation("androidx.appcompat:appcompat:1.6.1")
 
 

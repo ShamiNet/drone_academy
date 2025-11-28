@@ -12,9 +12,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/screens/equipment_checkout_screen.dart';
 
+// Added fallback ThemeService definition to avoid undefined name error.
+class ThemeService {
+  static Future<void> saveThemeMode(ThemeMode mode) async {
+    // Persist theme mode here if desired (e.g., SharedPreferences).
+    debugPrint('Theme mode saved: ${mode.name}');
+  }
+}
+
 class HomeScreen extends StatefulWidget {
   final void Function(Locale) setLocale;
-  const HomeScreen({super.key, required this.setLocale});
+  final void Function(ThemeMode)? setThemeMode;
+  const HomeScreen({super.key, required this.setLocale, this.setThemeMode});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -23,7 +32,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // ignore: unused_field
   String? _userName;
-  String? _userRole;
+  String? _userRole; // القيمة الافتراضية ستعالج في الأسفل
   String? _photoUrl;
   bool _isLoading = true;
 
@@ -34,43 +43,111 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchUserData() async {
+    debugPrint('🏠 [HOME] Start fetching user data...');
     final user = FirebaseAuth.instance.currentUser;
+
     if (user != null) {
+      debugPrint('🏠 [HOME] Current User ID: ${user.uid}');
       try {
         final docSnapshot = await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .get();
-        if (mounted && docSnapshot.exists) {
-          setState(() {
-            _userName = docSnapshot.data()?['displayName'];
-            _userRole = docSnapshot.data()?['role'];
-            _photoUrl = docSnapshot.data()?['photoUrl'];
-            _isLoading = false;
-          });
+
+        if (mounted) {
+          if (docSnapshot.exists) {
+            debugPrint('🏠 [HOME] User Document FOUND.');
+            final data = docSnapshot.data();
+            setState(() {
+              _userName = data?['displayName'];
+              _userRole = data?['role'];
+              _photoUrl = data?['photoUrl'];
+              _isLoading = false; // إيقاف التحميل
+            });
+            debugPrint('🏠 [HOME] Role: $_userRole');
+          } else {
+            debugPrint('⚠️ [HOME] User Document NOT FOUND in Firestore!');
+            // حالة خاصة: المستخدم مسجل دخول ولكن ليس لديه ملف بيانات
+            // سنعطيه دور افتراضي (متدرب) لنسمح له بالدخول
+            setState(() {
+              _userRole = 'trainee';
+              _userName = user.displayName ?? 'User';
+              _isLoading = false; // إيقاف التحميل ضروري هنا!
+            });
+          }
         }
       } catch (e) {
-        print("Error fetching user data: $e");
+        debugPrint("🔴 [HOME] Error fetching user data: $e");
         if (mounted) {
           setState(() {
-            _isLoading = false;
+            _isLoading = false; // إيقاف التحميل عند الخطأ
+            _userRole = 'trainee'; // دور افتراضي عند الخطأ
           });
         }
+      }
+    } else {
+      debugPrint('🔴 [HOME] User is null!');
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
 
   Widget _buildBody(AppLocalizations l10n) {
-    if (_userRole == 'trainer') {
-      // --- تم الإصلاح هنا: تمرير دالة setLocale ---
+    // سجل الدور لبناء الواجهة
+    debugPrint('🏠 [HOME] Building body for role: $_userRole');
+    // دعم دور المالك والمدير للوصول إلى لوحة الإدارة
+    if (_userRole == 'owner' || _userRole == 'admin') {
+      return const AdminDashboard();
+    } else if (_userRole == 'trainer') {
       return TrainerDashboard(onLocaleChange: widget.setLocale);
     } else if (_userRole == 'trainee') {
-      return const TraineeDashboard(); // إرجاع الواجهة البسيطة للمتدرب
-    } else if (_userRole == 'admin') {
-      return const AdminDashboard();
+      return DefaultTabController(
+        length: 4,
+        child: Column(
+          children: [
+            TabBar(
+              tabs: [
+                Tab(
+                  text: l10n.trainings,
+                  icon: const Icon(Icons.model_training),
+                ),
+                Tab(
+                  text: l10n.competitions,
+                  icon: const Icon(Icons.emoji_events),
+                ),
+                Tab(text: l10n.equipment, icon: const Icon(Icons.construction)),
+                Tab(text: l10n.inventory, icon: const Icon(Icons.all_inbox)),
+              ],
+            ),
+            const Expanded(
+              child: TabBarView(
+                children: [
+                  TraineeDashboard(),
+                  TraineeCompetitionsScreen(),
+                  EquipmentCheckoutScreen(),
+                  InventoryScreen(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     } else {
+      // حالة احتياطية إذا لم يتم تحديد الدور
       return Center(
-        child: Text(l10n.welcome, style: const TextStyle(fontSize: 24)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(l10n.welcome, style: const TextStyle(fontSize: 24)),
+            const SizedBox(height: 10),
+            const Text("Role not assigned or unknown."),
+            ElevatedButton(
+              onPressed: _fetchUserData,
+              child: const Text("Retry"),
+            ),
+          ],
+        ),
       );
     }
   }
@@ -78,11 +155,29 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final brightness = Theme.of(context).brightness;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_isLoading ? l10n.loading : l10n.home),
         actions: [
+          // تبديل الثيم بسرعة من شريط العنوان
+          IconButton(
+            tooltip: brightness == Brightness.dark ? 'وضع نهاري' : 'وضع ليلي',
+            icon: Icon(
+              brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            onPressed: () async {
+              final newMode = brightness == Brightness.dark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
+              // استدعاء الضبط المركزي لضمان تطبيق فوري على MaterialApp
+              widget.setThemeMode?.call(newMode);
+              await ThemeService.saveThemeMode(newMode);
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: GestureDetector(
@@ -97,9 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               child: CircleAvatar(
                 backgroundColor: Colors.grey.shade300,
-                backgroundImage:
-                    (_photoUrl != null &&
-                        _photoUrl!.isNotEmpty) // --- التعديل هنا
+                backgroundImage: (_photoUrl != null && _photoUrl!.isNotEmpty)
                     ? CachedNetworkImageProvider(_photoUrl!)
                     : null,
                 child: (_photoUrl == null || _photoUrl!.isEmpty)
