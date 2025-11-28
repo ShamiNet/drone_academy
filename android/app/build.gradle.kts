@@ -1,6 +1,6 @@
 plugins {
     id("com.android.application")
-    id("kotlin-android")
+    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
@@ -12,11 +12,13 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Roll back to Java 11 since local JDK 17 isn't available; still supported by AGP 8.x
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
 
     kotlinOptions {
+        // Align JVM target with Java 11 for compatibility
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
@@ -40,6 +42,8 @@ android {
         }
     }
 }
+
+// (Optional) Toolchain config removed due to missing JDK 17; Gradle will use installed JDK.
 dependencies {
   // Import the Firebase BoM
   implementation(platform("com.google.firebase:firebase-bom:34.3.0"))

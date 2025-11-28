@@ -13,7 +13,10 @@ class ManageUsersScreen extends StatefulWidget {
   State<ManageUsersScreen> createState() => _ManageUsersScreenState();
 }
 
-class _ManageUsersScreenState extends State<ManageUsersScreen> {
+class _ManageUsersScreenState extends State<ManageUsersScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   late AppLocalizations l10n;
   String _searchQuery = '';
   final _searchController = TextEditingController();
@@ -50,11 +53,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     String currentRole = user['role'];
     String? currentParentId =
         (user.data() as Map<String, dynamic>).containsKey('parentId')
-            ? user['parentId']
-            : null;
+        ? user['parentId']
+        : null;
     final potentialParents = allUsers.where((u) => u.id != user.id).toList();
-    final _displayNameController =
-        TextEditingController(text: user['displayName']);
+    final _displayNameController = TextEditingController(
+      text: user['displayName'],
+    );
 
     showDialog(
       context: context,
@@ -80,8 +84,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     DropdownButton<String>(
                       value: currentRole,
                       isExpanded: true,
-                      items: ['admin', 'manager', 'trainer', 'trainee']
-                          .map((String role) {
+                      items: ['admin', 'manager', 'trainer', 'trainee'].map((
+                        String role,
+                      ) {
                         return DropdownMenuItem<String>(
                           value: role,
                           child: Text(role),
@@ -132,10 +137,10 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         .collection('users')
                         .doc(user.id)
                         .update({
-                      'displayName': _displayNameController.text,
-                      'role': currentRole,
-                      'parentId': currentParentId ?? '',
-                    });
+                          'displayName': _displayNameController.text,
+                          'role': currentRole,
+                          'parentId': currentParentId ?? '',
+                        });
                     Navigator.pop(context);
                   },
                   child: Text(l10n.save),
@@ -214,7 +219,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   ? const Icon(Icons.person)
                   : null,
             ),
-            title: Text(user['displayName']),
+            title: Text(
+              user['displayName'],
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             subtitle: Text(
               role,
               style: TextStyle(color: roleColor, fontWeight: FontWeight.bold),
@@ -264,8 +275,19 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 ? const Icon(Icons.person)
                 : null,
           ),
-          title: Text(user['displayName']),
-          subtitle: Text(user['email'] ?? ''),
+          title: Text(
+            user['displayName'],
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: Text(
+            user['email'] ?? '',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -286,6 +308,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       body: Column(
         children: [
@@ -521,6 +544,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-manage-users',
         onPressed: () {
           Navigator.push(
             context,

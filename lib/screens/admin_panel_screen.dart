@@ -142,12 +142,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                 user.name ??
                                     user.email ??
                                     'User ${user.uid.substring(0, 8)}',
-                                style: const TextStyle(
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               subtitle: Text(
                                 '${getRoleName(user.role)} • ${user.email ?? user.uid}',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.7),
+                                ),
                               ),
                               trailing: Switch(
                                 value: user.isBanned,

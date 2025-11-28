@@ -12,7 +12,10 @@ class ManageTrainingsTab extends StatefulWidget {
   State<ManageTrainingsTab> createState() => _ManageTrainingsTabState();
 }
 
-class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
+class _ManageTrainingsTabState extends State<ManageTrainingsTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _searchController = TextEditingController();
   final ValueNotifier<String> _searchQuery = ValueNotifier('');
 
@@ -75,6 +78,7 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
@@ -282,6 +286,7 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-manage-trainings',
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const EditTrainingScreen()),

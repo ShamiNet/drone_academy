@@ -13,8 +13,11 @@ class ManageEquipmentScreen extends StatefulWidget {
   State<ManageEquipmentScreen> createState() => _ManageEquipmentScreenState();
 }
 
-class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
+class _ManageEquipmentScreenState extends State<ManageEquipmentScreen>
+    with AutomaticKeepAliveClientMixin {
   late AppLocalizations l10n;
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void didChangeDependencies() {
@@ -110,6 +113,7 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -146,8 +150,10 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
               final type = sortedTypes[index];
               final items = equipmentByType[type]!;
               return Card(
-                margin:
-                    const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                margin: const EdgeInsets.symmetric(
+                  vertical: 8.0,
+                  horizontal: 8.0,
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: ExpansionTile(
                   title: Text(
@@ -168,7 +174,8 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
 
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
+                        backgroundImage:
+                            (imageUrl != null && imageUrl.isNotEmpty)
                             ? CachedNetworkImageProvider(imageUrl)
                             : null,
                         backgroundColor: Colors.grey.shade200,
@@ -240,6 +247,7 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-manage-equipment',
         onPressed: () {
           Navigator.push(
             context,

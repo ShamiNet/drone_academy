@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 
 class AuthGate extends StatelessWidget {
   final void Function(Locale) setLocale;
-  const AuthGate({super.key, required this.setLocale});
+  final void Function(ThemeMode)? setThemeMode;
+  const AuthGate({super.key, required this.setLocale, this.setThemeMode});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +19,7 @@ class AuthGate extends StatelessWidget {
         }
 
         // If the user is logged in, go to the home screen
-        return HomeScreen(setLocale: setLocale);
+        return HomeScreen(setLocale: setLocale, setThemeMode: setThemeMode);
       },
     );
   }

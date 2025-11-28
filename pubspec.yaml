@@ -58,7 +58,6 @@ dependencies:
   gal: ^2.3.2
   path_provider: ^2.1.5
   percent_indicator: ^4.2.5
-  fl_chart: ^1.1.1
   # url_launcher: ^6.3.2 (removed duplicate)
   table_calendar: ^3.2.0
   google_generative_ai: ^0.4.7
@@ -67,6 +66,7 @@ dependencies:
   cropperx: ^1.1.1
   device_info_plus: ^12.2.0
   file_saver: ^0.3.1
+  fl_chart: ^1.1.1
   # pdfx: ^2.9.0
 
 

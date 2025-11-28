@@ -12,7 +12,10 @@ class ManageCompetitionsTab extends StatefulWidget {
   State<ManageCompetitionsTab> createState() => _ManageCompetitionsTabState();
 }
 
-class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
+class _ManageCompetitionsTabState extends State<ManageCompetitionsTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _searchController = TextEditingController();
   final ValueNotifier<String> _searchQuery = ValueNotifier('');
 
@@ -82,6 +85,7 @@ class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
@@ -226,6 +230,7 @@ class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab-manage-competitions',
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(

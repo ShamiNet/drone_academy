@@ -15,8 +15,11 @@ class ManageInventoryScreen extends StatefulWidget {
   State<ManageInventoryScreen> createState() => _ManageInventoryScreenState();
 }
 
-class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
+class _ManageInventoryScreenState extends State<ManageInventoryScreen>
+    with AutomaticKeepAliveClientMixin {
   late AppLocalizations l10n;
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void didChangeDependencies() {
@@ -81,6 +84,7 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -90,105 +94,127 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
             Tab(text: l10n.inventoryList, icon: const Icon(Icons.list_alt)),
           ],
         ),
-        body: TabBarView(
-          children: [
-            const InventoryScreen(), // شاشة السحب والإرجاع
-            Scaffold(
-              body: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('inventory')
-                    .orderBy('name')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return EmptyStateWidget(
-                      message: l10n.noInventoryItems,
-                      imagePath: 'assets/illustrations/no_data.svg',
-                    );
-                  }
-
-                  final items = snapshot.data!.docs;
-
-                  return ListView.builder(
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final data = item.data() as Map<String, dynamic>;
-                      final itemName = data['name'];
-                      final available = data['availableQuantity'];
-                      final total = data['totalQuantity'];
-
-                      return Card(
-                        child: ListTile(
-                          title: Text(
-                            itemName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            '${l10n.availableQuantity}: $available / $total',
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => InventoryHistoryScreen(
-                                  itemId: item.id,
-                                  itemName: itemName,
-                                ),
-                              ),
+        body: Builder(
+          builder: (context) {
+            final controller = DefaultTabController.of(context);
+            return AnimatedBuilder(
+              animation: controller.animation!,
+              builder: (context, _) {
+                final currentIndex = controller.index;
+                return IndexedStack(
+                  index: currentIndex,
+                  children: [
+                    const InventoryScreen(),
+                    Scaffold(
+                      body: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('inventory')
+                            .orderBy('name')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
                             );
-                          },
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                ),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          EditInventoryItemScreen(item: item),
+                          }
+                          if (!snapshot.hasData ||
+                              snapshot.data!.docs.isEmpty) {
+                            return EmptyStateWidget(
+                              message: l10n.noInventoryItems,
+                              imagePath: 'assets/illustrations/no_data.svg',
+                            );
+                          }
+
+                          final items = snapshot.data!.docs;
+                          return ListView.builder(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              final data = item.data() as Map<String, dynamic>;
+                              final itemName = data['name'];
+                              final available = data['availableQuantity'];
+                              final total = data['totalQuantity'];
+
+                              return Card(
+                                child: ListTile(
+                                  title: Text(
+                                    itemName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                  );
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
+                                  ),
+                                  subtitle: Text(
+                                    '${l10n.availableQuantity}: $available / $total',
+                                  ),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            InventoryHistoryScreen(
+                                              itemId: item.id,
+                                              itemName: itemName,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                        ),
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  EditInventoryItemScreen(
+                                                    item: item,
+                                                  ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: () =>
+                                            _showDeleteConfirmationDialog(item),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                onPressed: () =>
-                                    _showDeleteConfirmationDialog(item),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-              floatingActionButton: FloatingActionButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const EditInventoryItemScreen(),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      floatingActionButton: FloatingActionButton(
+                        heroTag: 'fab-manage-inventory',
+                        tooltip: l10n.addInventoryItem,
+                        child: const Icon(Icons.add),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const EditInventoryItemScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  );
-                },
-                tooltip: l10n.addInventoryItem,
-                child: const Icon(Icons.add),
-              ),
-            ),
-          ],
+                  ],
+                );
+              },
+            );
+          },
         ),
       ),
     );

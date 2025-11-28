@@ -7,6 +7,7 @@ import 'package:drone_academy/services/update_service.dart';
 import 'package:drone_academy/services/ban_check_service.dart';
 import 'package:drone_academy/services/notification_service.dart';
 import 'package:drone_academy/theme/app_theme.dart'; // 1. استيراد ملف الثيم
+import 'package:drone_academy/services/theme_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -35,18 +36,30 @@ class _MyAppState extends State<MyApp> {
   Locale? _locale;
   bool _updateRequired = false;
   bool _userBanned = false;
+  ThemeMode _themeMode = ThemeMode.system; // الوضع الحالي
 
   @override
   void initState() {
     super.initState();
     _checkUpdate();
     _checkBanStatus();
+    _loadThemeMode();
+  }
+
+  Future<void> _loadThemeMode() async {
+    final saved = await ThemeService.loadThemeMode();
+    if (saved != null && mounted) {
+      setState(() => _themeMode = saved);
+    }
   }
 
   void setLocale(Locale locale) {
-    setState(() {
-      _locale = locale;
-    });
+    setState(() => _locale = locale);
+  }
+
+  void setThemeMode(ThemeMode mode) async {
+    setState(() => _themeMode = mode);
+    await ThemeService.saveThemeMode(mode);
   }
 
   Future<void> _checkUpdate() async {
@@ -95,7 +108,7 @@ class _MyAppState extends State<MyApp> {
       title: 'Drone Academy',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: _themeMode,
       locale: _locale,
       supportedLocales: [Locale('en'), Locale('ar'), Locale('ru')],
       localizationsDelegates: [
@@ -113,7 +126,7 @@ class _MyAppState extends State<MyApp> {
               message:
                   'يجب عليك تحديث التطبيق للاستمرار في استخدام جميع الميزات. اضغط على زر التحديث للانتقال إلى المتجر.',
             )
-          : SplashScreen(setLocale: setLocale),
+          : SplashScreen(setLocale: setLocale, setThemeMode: setThemeMode),
     );
   }
 }

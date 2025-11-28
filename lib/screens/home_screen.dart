@@ -7,6 +7,7 @@ import 'package:drone_academy/screens/trainee_competitions_screen.dart';
 import 'package:drone_academy/screens/trainee_dashboard.dart';
 import 'package:drone_academy/screens/trainer_dashboard.dart';
 import 'package:flutter/material.dart';
+import 'package:drone_academy/services/theme_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,7 +15,8 @@ import 'package:drone_academy/screens/equipment_checkout_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final void Function(Locale) setLocale;
-  const HomeScreen({super.key, required this.setLocale});
+  final void Function(ThemeMode)? setThemeMode;
+  const HomeScreen({super.key, required this.setLocale, this.setThemeMode});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -61,7 +63,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody(AppLocalizations l10n) {
-    if (_userRole == 'trainer') {
+    // دعم دور المالك (owner) بنفس توجيه لوحة الإدارة
+    if (_userRole == 'owner' || _userRole == 'admin') {
+      return const AdminDashboard();
+    } else if (_userRole == 'trainer') {
       // --- تم الإصلاح هنا: تمرير دالة setLocale ---
       return TrainerDashboard(onLocaleChange: widget.setLocale);
     } else if (_userRole == 'trainee') {
@@ -96,8 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       );
-    } else if (_userRole == 'admin') {
-      return const AdminDashboard();
     } else {
       return Center(
         child: Text(l10n.welcome, style: const TextStyle(fontSize: 24)),
@@ -108,11 +111,29 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final brightness = Theme.of(context).brightness;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_isLoading ? l10n.loading : l10n.home),
         actions: [
+          // تبديل الثيم بسرعة من شريط العنوان
+          IconButton(
+            tooltip: brightness == Brightness.dark ? 'وضع نهاري' : 'وضع ليلي',
+            icon: Icon(
+              brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            onPressed: () async {
+              final newMode = brightness == Brightness.dark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
+              // استدعاء الضبط المركزي لضمان تطبيق فوري على MaterialApp
+              widget.setThemeMode?.call(newMode);
+              await ThemeService.saveThemeMode(newMode);
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: GestureDetector(
