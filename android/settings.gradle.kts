@@ -11,8 +11,17 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
+        // Ensure Google's Maven and the Gradle Plugin portal are available
+        // (some plugin artifacts such as the Android Gradle Plugin are hosted on Google's Maven)
+        maven {
+            url = uri("https://dl.google.com/dl/android/maven2/")
+        }
         google()
         mavenCentral()
+        // Explicit plugin portal URL as a fallback for plugin resolution
+        maven {
+            url = uri("https://plugins.gradle.org/m2/")
+        }
         gradlePluginPortal()
     }
 }
@@ -20,6 +29,9 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.9.1" apply false
+    // START: FlutterFire Configuration
+    id("com.google.gms.google-services") version("4.4.3") apply false
+    // END: FlutterFire Configuration
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
 }
 
