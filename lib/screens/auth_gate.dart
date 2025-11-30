@@ -5,19 +5,19 @@ import 'package:flutter/material.dart';
 
 class AuthGate extends StatelessWidget {
   final void Function(Locale) setLocale;
-  const AuthGate({super.key, required this.setLocale});
+  final void Function(ThemeMode) setThemeMode; // 1. إضافة المتغير
+
+  const AuthGate({
+    super.key,
+    required this.setLocale,
+    required this.setThemeMode, // 2. إضافته للمنشئ
+  });
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // [DEBUG] طباعة حالة المراقب
-        debugPrint(
-          '🔐 [AUTH GATE] ConnectionState: ${snapshot.connectionState}',
-        );
-
-        // في حالة الانتظار (أول لحظة)، اعرض دائرة تحميل
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -25,12 +25,11 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData && snapshot.data != null) {
-          debugPrint(
-            '🔐 [AUTH GATE] User Detected: ${snapshot.data!.uid} -> Going to Home',
+          return HomeScreen(
+            setLocale: setLocale,
+            setThemeMode: setThemeMode, // 3. تمريره إلى HomeScreen
           );
-          return HomeScreen(setLocale: setLocale);
         } else {
-          debugPrint('🔐 [AUTH GATE] No User -> Going to Login');
           return const LoginScreen();
         }
       },

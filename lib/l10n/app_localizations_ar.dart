@@ -674,7 +674,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get userUnblocked => 'تم إلغاء حظر المستخدم بنجاح.';
 
   @override
-  String get reportReadyTitle => 'التقرير جاهز';
+  String get reportReadyTitle => 'Report Ready';
 
   @override
   String get reportSavedSuccessfully => 'تم حفظ التقرير بنجاح في التنزيلات.';
@@ -684,7 +684,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get reportReadyContent =>
-      'تم إنشاء تقريرك الشامل بنجاح. يمكنك الآن تصديره أو مشاركته حسب رغبتك.';
+      'Your comprehensive report has been generated successfully. You can now export or share it as you wish.';
 
   @override
   String get export => 'تصدير';
@@ -693,10 +693,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get share => 'Share';
 
   @override
-  String get saveToDownloads => 'حفظ في التنزيلات';
+  String get saveToDownloads => 'Save to Downloads';
 
   @override
-  String get previewAndPrint => 'معاينة و طباعة';
+  String get previewAndPrint => 'Preview and Print';
 
   @override
   String get reportGeneratedSuccessfully => 'تم إنشاء التقرير بنجاح.';
