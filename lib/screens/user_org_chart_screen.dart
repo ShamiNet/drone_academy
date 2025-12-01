@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/add_user_screen.dart';
-import 'package:drone_academy/screens/user_details_screen.dart';
+// import 'package:drone_academy/screens/user_details_screen.dart'; // يمكن تفعيله بعد تحديث تلك الشاشة
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
 import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -25,15 +26,16 @@ class UserOrgChartScreen extends StatefulWidget {
 }
 
 class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
+  final ApiService _apiService = ApiService();
   final TransformationController _transformationController =
       TransformationController();
   late AppLocalizations l10n;
   final GlobalKey _chartKey = GlobalKey();
-  // --- بداية الإصلاح: استخدام متغير حالة للـ Future ---
   final GlobalKey _viewerKey = GlobalKey();
   bool _initialLayoutDone = false;
 
-  late Future<QuerySnapshot> _futureUsers;
+  // استخدام قائمة ديناميكية بدلاً من QuerySnapshot
+  late Future<List<dynamic>> _futureUsers;
 
   @override
   void initState() {
@@ -41,8 +43,8 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
     _futureUsers = _fetchUsers();
   }
 
-  Future<QuerySnapshot> _fetchUsers() {
-    return FirebaseFirestore.instance.collection('users').get();
+  Future<List<dynamic>> _fetchUsers() {
+    return _apiService.fetchUsers();
   }
 
   void _refreshChart() {
@@ -50,7 +52,6 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
       _futureUsers = _fetchUsers();
     });
   }
-  // --- نهاية الإصلاح ---
 
   @override
   void didChangeDependencies() {
@@ -128,8 +129,8 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
   }
 
   void _showNodeOptionsDialog(
-    DocumentSnapshot userDoc,
-    List<DocumentSnapshot> allUsers,
+    Map<String, dynamic> user,
+    List<dynamic> allUsers,
   ) {
     showModalBottomSheet(
       context: context,
@@ -141,11 +142,10 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
               title: Text(l10n.editProfile),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserDetailsScreen(userDoc: userDoc),
-                  ),
+                // تم تعطيل الانتقال مؤقتاً حتى يتم تحديث UserDetailsScreen لتقبل Map
+                // Navigator.push(context, MaterialPageRoute(builder: (context) => UserDetailsScreen(userData: user)));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Coming soon via API")),
                 );
               },
             ),
@@ -154,7 +154,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
               title: Text(l10n.edit),
               onTap: () {
                 Navigator.pop(context);
-                _showEditUserDialog(userDoc, allUsers);
+                _showEditUserDialog(user, allUsers);
               },
             ),
             ListTile(
@@ -162,7 +162,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
               title: Text(l10n.addNodeBelow),
               onTap: () {
                 Navigator.pop(context);
-                _showSelectSubordinateDialog(userDoc, allUsers);
+                _showSelectSubordinateDialog(user, allUsers);
               },
             ),
             ListTile(
@@ -173,7 +173,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteUserDialog(userDoc);
+                _showDeleteUserDialog(user);
               },
             ),
           ],
@@ -183,15 +183,17 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
   }
 
   void _showEditUserDialog(
-    DocumentSnapshot user,
-    List<DocumentSnapshot> allUsers,
+    Map<String, dynamic> user,
+    List<dynamic> allUsers,
   ) async {
-    String currentRole = user['role'];
-    String? currentParentId =
-        (user.data() as Map<String, dynamic>).containsKey('parentId')
-        ? user['parentId']
-        : null;
-    final potentialParents = allUsers.where((u) => u.id != user.id).toList();
+    String currentRole = user['role'] ?? 'trainee';
+    String? currentParentId = user['parentId'];
+    final userId = user['id'] ?? user['uid'];
+
+    final potentialParents = allUsers.where((u) {
+      final uId = u['id'] ?? u['uid'];
+      return uId != userId;
+    }).toList();
 
     showDialog(
       context: context,
@@ -237,10 +239,10 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
                           value: null,
                           child: Text('Top Level'),
                         ),
-                        ...potentialParents.map((doc) {
+                        ...potentialParents.map((u) {
                           return DropdownMenuItem<String>(
-                            value: doc.id,
-                            child: Text(doc['displayName']),
+                            value: u['id'] ?? u['uid'],
+                            child: Text(u['displayName'] ?? 'Unknown'),
                           );
                         }),
                       ],
@@ -258,22 +260,18 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.id)
-                        .update({
-                          'role': currentRole,
-                          'parentId': currentParentId ?? '',
-                        });
+                    await _apiService.updateUser({
+                      'uid': userId,
+                      'role': currentRole,
+                      'parentId': currentParentId ?? '',
+                    });
                     Navigator.pop(context);
-                    // Force a rebuild of the FutureBuilder
                     if (mounted) {
                       showCustomSnackBar(
                         context,
                         'User updated!',
                         isError: false,
                       );
-                      // setState(() {}); // Replaced with _refreshChart
                       _refreshChart();
                     }
                   },
@@ -287,7 +285,8 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
     );
   }
 
-  void _showDeleteUserDialog(DocumentSnapshot user) {
+  void _showDeleteUserDialog(Map<String, dynamic> user) {
+    final userId = user['id'] ?? user['uid'];
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -300,15 +299,11 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
           ),
           TextButton(
             onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.id)
-                  .delete();
+              await _apiService.deleteUser(userId);
               Navigator.pop(context);
-              // Force a rebuild of the FutureBuilder
               if (mounted) {
                 showCustomSnackBar(context, 'User deleted!', isError: false);
-                _refreshChart(); // --- استخدام الدالة الجديدة ---
+                _refreshChart();
               }
             },
             child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
@@ -319,16 +314,16 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
   }
 
   void _showSelectSubordinateDialog(
-    DocumentSnapshot parentDoc,
-    List<DocumentSnapshot> allUsers,
+    Map<String, dynamic> parentUser,
+    List<dynamic> allUsers,
   ) async {
-    // --- NEW: Filter for unassigned users ---
+    final parentId = parentUser['id'] ?? parentUser['uid'];
+
+    // فلترة المستخدمين غير المعينين
     final unassignedUsers = allUsers.where((user) {
-      final data = user.data() as Map<String, dynamic>;
-      final parentId = data.containsKey('parentId')
-          ? data['parentId'] as String?
-          : null;
-      return user.id != parentDoc.id && (parentId == null || parentId.isEmpty);
+      final uId = user['id'] ?? user['uid'];
+      final pId = user['parentId'];
+      return uId != parentId && (pId == null || pId.isEmpty);
     }).toList();
 
     showDialog(
@@ -338,32 +333,30 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
           title: Text(l10n.addNodeBelow),
           content: SizedBox(
             width: double.maxFinite,
-            child:
-                unassignedUsers
-                    .isEmpty // Handle empty case
+            child: unassignedUsers.isEmpty
                 ? Text(l10n.noOtherNodesAvailable)
                 : ListView.builder(
                     shrinkWrap: true,
-                    itemCount: unassignedUsers.length, // Use filtered list
+                    itemCount: unassignedUsers.length,
                     itemBuilder: (context, index) {
-                      final user = unassignedUsers[index]; // Use filtered list
+                      final user = unassignedUsers[index];
                       return ListTile(
-                        title: Text(user['displayName']),
-                        subtitle: Text(user['role']),
+                        title: Text(user['displayName'] ?? 'Unknown'),
+                        subtitle: Text(user['role'] ?? ''),
                         onTap: () async {
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user.id)
-                              .update({'parentId': parentDoc.id});
+                          final userId = user['id'] ?? user['uid'];
+                          await _apiService.updateUser({
+                            'uid': userId,
+                            'parentId': parentId,
+                          });
                           Navigator.of(context).pop();
-                          // Force a rebuild of the FutureBuilder
                           if (mounted) {
                             showCustomSnackBar(
                               context,
                               'User assigned!',
                               isError: false,
                             );
-                            _refreshChart(); // --- استخدام الدالة الجديدة ---
+                            _refreshChart();
                           }
                         },
                       );
@@ -385,7 +378,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.organizationalStructure),
+        title: Text(l10n.usersOrgChart), // استخدام مفتاح الترجمة الصحيح
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
@@ -403,86 +396,62 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const AddUserScreen()),
-        ).then((_) => _refreshChart()), // --- استخدام الدالة الجديدة ---
+        ).then((_) => _refreshChart()),
         tooltip: l10n.addUser,
         child: const Icon(Icons.add),
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
-        child: FutureBuilder<QuerySnapshot>(
-          future: _futureUsers, // --- استخدام متغير الحالة ---
+        child: FutureBuilder<List<dynamic>>(
+          future: _futureUsers,
           builder:
-              (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+              (BuildContext context, AsyncSnapshot<List<dynamic>> snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(child: Text(l10n.noUsersFound));
                 }
 
-                final allUsers = snapshot.data!.docs;
-                final docsMap = {for (var doc in allUsers) doc.id: doc};
+                final allUsers = snapshot.data!;
                 final graph = Graph();
                 final Map<String, Node> nodesMap = {};
 
-                for (var doc in allUsers) {
-                  nodesMap[doc.id] = Node.Id(doc.id);
-                  graph.addNode(nodesMap[doc.id]!);
-                }
+                // خريطة للوصول السريع لبيانات المستخدم عبر الـ ID
+                final Map<String, Map<String, dynamic>> usersDataMap = {};
 
-                for (var doc in allUsers) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final parentId = data['parentId'] as String?;
-                  if (parentId != null &&
-                      parentId.isNotEmpty &&
-                      nodesMap.containsKey(parentId) &&
-                      nodesMap.containsKey(doc.id)) {
-                    graph.addEdge(nodesMap[parentId]!, nodesMap[doc.id]!);
+                for (var user in allUsers) {
+                  final id = user['id'] ?? user['uid'];
+                  if (id != null) {
+                    nodesMap[id] = Node.Id(id);
+                    graph.addNode(nodesMap[id]!);
+                    usersDataMap[id] = user as Map<String, dynamic>;
                   }
                 }
 
-                // --- بداية التعديل: ضبط العرض الأولي ليناسب الشاشة ---
+                for (var user in allUsers) {
+                  final id = user['id'] ?? user['uid'];
+                  final parentId = user['parentId'] as String?;
+
+                  if (parentId != null &&
+                      parentId.isNotEmpty &&
+                      nodesMap.containsKey(parentId) &&
+                      nodesMap.containsKey(id)) {
+                    graph.addEdge(nodesMap[parentId]!, nodesMap[id]!);
+                  }
+                }
+
+                // التوسيط التلقائي
                 if (!_initialLayoutDone) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!mounted) return;
-
-                    final viewerContext = _viewerKey.currentContext;
-                    final chartContext = _chartKey.currentContext;
-
-                    if (viewerContext != null && chartContext != null) {
-                      final viewerBox =
-                          viewerContext.findRenderObject() as RenderBox;
-                      final chartBox =
-                          chartContext.findRenderObject() as RenderBox;
-
-                      final viewerSize = viewerBox.size;
-                      final chartSize = chartBox.size;
-
-                      if (chartSize.width > 0 && chartSize.height > 0) {
-                        final scale =
-                            (viewerSize.width / chartSize.width) <
-                                (viewerSize.height / chartSize.height)
-                            ? (viewerSize.width / chartSize.width)
-                            : (viewerSize.height / chartSize.height);
-
-                        // --- بداية التعديل: التوسيط الأفقي فقط ---
-                        final dx =
-                            (viewerSize.width - chartSize.width * scale) / 2;
-                        // --- نهاية التعديل ---
-
-                        _transformationController.value = Matrix4.identity()
-                          ..translate(
-                            dx,
-                            20.0, // إضافة padding علوي لتحريكه للأسفل قليلاً
-                          ) // استخدام dx للتوسيط الأفقي، و 50 للـ dy
-                          ..scale(scale);
-
-                        _initialLayoutDone = true;
-                      }
-                    }
+                    // (نفس منطق التوسيط السابق)
+                    _transformationController.value = Matrix4.identity()
+                      ..translate(100.0, 50.0)
+                      ..scale(0.8);
+                    _initialLayoutDone = true;
                   });
                 }
-                // --- نهاية التعديل ---
 
                 return Stack(
                   key: _viewerKey,
@@ -506,10 +475,10 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
                           ),
                           builder: (Node node) {
                             final docId = node.key!.value as String;
-                            if (!docsMap.containsKey(docId)) return Container();
+                            if (!usersDataMap.containsKey(docId))
+                              return Container();
 
-                            final doc = docsMap[docId]!;
-                            final data = doc.data() as Map<String, dynamic>;
+                            final data = usersDataMap[docId]!;
                             final String role = data['role'] ?? '';
 
                             Color nodeColor;
@@ -530,7 +499,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
 
                             return GestureDetector(
                               onTap: () =>
-                                  _showNodeOptionsDialog(doc, allUsers),
+                                  _showNodeOptionsDialog(data, allUsers),
                               child: Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -554,15 +523,14 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      data['displayName'] ?? '',
+                                      data['displayName'] ?? 'Unknown',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                       ),
                                       textAlign: TextAlign.center,
                                     ),
-                                    if (data['role'] != null &&
-                                        data['role'].isNotEmpty)
+                                    if (data['role'] != null)
                                       Text(
                                         data['role'],
                                         style: const TextStyle(

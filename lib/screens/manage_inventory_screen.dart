@@ -1,10 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/edit_inventory_item_screen.dart';
-import 'package:drone_academy/utils/snackbar_helper.dart'; // تأكد من وجود هذا الملف
+import 'package:drone_academy/screens/inventory_history_screen.dart';
+import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:drone_academy/widgets/empty_state_widget.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 class ManageInventoryScreen extends StatefulWidget {
   const ManageInventoryScreen({super.key});
@@ -13,128 +14,121 @@ class ManageInventoryScreen extends StatefulWidget {
   State<ManageInventoryScreen> createState() => _ManageInventoryScreenState();
 }
 
-class _ManageInventoryScreenState extends State<ManageInventoryScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
+class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
+  final ApiService _apiService = ApiService();
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+  final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  final String currentUserName =
+      FirebaseAuth.instance.currentUser?.displayName ?? 'Unknown';
 
   @override
   Widget build(BuildContext context) {
     const bgColor = Color(0xFF111318);
-    const cardColor = Color(0xFF1E2230);
-    const activeTabColor = Color(
-      0xFF8FA1B4,
-    ); // لون التبويب النشط (تقريبي من الصورة)
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
         backgroundColor: bgColor,
-        elevation: 0,
-        toolbarHeight: 0, // إخفاء الـ AppBar العلوي لأننا نستخدم التبويبات فقط
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.blue, // اللون الأزرق للنص النشط
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.blue,
-          tabs: const [
-            Tab(text: 'قائمة المخزون', icon: Icon(Icons.list_alt)),
-            Tab(text: 'العمليات', icon: Icon(Icons.swap_horiz)),
-          ],
+        appBar: AppBar(
+          backgroundColor: bgColor,
+          elevation: 0,
+          toolbarHeight: 0,
+          bottom: TabBar(
+            indicatorColor: const Color(0xFF8FA1B4),
+            labelColor: const Color(0xFF8FA1B4),
+            unselectedLabelColor: Colors.grey,
+            tabs: [
+              Tab(text: l10n.inventoryList, icon: const Icon(Icons.list_alt)),
+              Tab(text: l10n.operations, icon: const Icon(Icons.sync_alt)),
+            ],
+          ),
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // --- التبويب الأول: قائمة المخزون (تعديل وحذف) ---
-          _buildInventoryListTab(cardColor),
-          // --- التبويب الثاني: العمليات (استعارة وإرجاع) ---
-          _buildOperationsTab(cardColor),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const EditInventoryItemScreen()),
+        body: TabBarView(
+          children: [_buildInventoryListTab(), _buildOperationsTab()],
         ),
-        backgroundColor: const Color(0xFFFF9800),
-        child: const Icon(Icons.add, color: Colors.black),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const EditInventoryItemScreen()),
+          ),
+          backgroundColor: const Color(0xFFFF9800),
+          child: const Icon(Icons.add, color: Colors.black),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 
-  // --- ودجت التبويب الأول ---
-  Widget _buildInventoryListTab(Color cardColor) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('inventory')
-          .orderBy('name')
-          .snapshots(),
+  Widget _buildInventoryListTab() {
+    return StreamBuilder<List<dynamic>>(
+      stream: _apiService.streamInventory(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
-        final items = snapshot.data!.docs;
+        }
+        final items = snapshot.data ?? [];
+        if (items.isEmpty) return _buildEmptyState();
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            final data = item.data() as Map<String, dynamic>;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFF1E2230),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                children: [
-                  // أيقونة الحذف (أحمر)
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Color(0xFFE53935)),
-                    onPressed: () => item.reference.delete(),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                title: Text(
+                  item['name'] ?? '',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
                   ),
-                  // أيقونة التعديل (أزرق)
-                  IconButton(
-                    icon: const Icon(Icons.edit, color: Color(0xFF42A5F5)),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditInventoryItemScreen(item: item),
-                      ),
+                  textAlign: TextAlign.right,
+                ),
+                subtitle: Text(
+                  '${item['availableQuantity']} / ${item['totalQuantity']} :الكمية المتاحة',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  textAlign: TextAlign.right,
+                ),
+                // --- تفعيل الانتقال للسجل ---
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InventoryHistoryScreen(
+                      itemId: item['id'],
+                      itemName: item['name'],
                     ),
                   ),
-                  const Spacer(),
-                  // النصوص
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        data['name'] ?? 'Item',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                ),
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () =>
+                          _showDeleteDialog(item['id'], item['name']),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.blue),
+                      // --- تفعيل الانتقال للتعديل ---
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EditInventoryItemScreen(item: item),
                         ),
                       ),
-                      Text(
-                        'الكمية المتاحة: ${data['availableQuantity']} / ${data['totalQuantity']}',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -143,84 +137,66 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen>
     );
   }
 
-  // --- ودجت التبويب الثاني (العمليات) ---
-  Widget _buildOperationsTab(Color cardColor) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('inventory')
-          .orderBy('name')
-          .snapshots(),
+  Widget _buildOperationsTab() {
+    return StreamBuilder<List<dynamic>>(
+      stream: _apiService.streamInventory(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
-        final items = snapshot.data!.docs;
+        }
+        final items = snapshot.data ?? [];
+        if (items.isEmpty) return _buildEmptyState();
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            final data = item.data() as Map<String, dynamic>;
-            final total = data['totalQuantity'] as int? ?? 1;
-            final available = data['availableQuantity'] as int? ?? 0;
-            final double percent = (available / total).clamp(0.0, 1.0);
+            final int available = item['availableQuantity'] ?? 0;
+            final int total = item['totalQuantity'] ?? 1;
+            final double percent = (total > 0) ? (available / total) : 0.0;
 
             return Container(
-              margin: const EdgeInsets.only(bottom: 12),
+              margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFF1E2230),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF2C3246)),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // الأزرار
                       Row(
                         children: [
-                          // زر إرجاع (داكن بحدود)
-                          OutlinedButton(
-                            onPressed: () =>
-                                _showOperationDialog(item, isCheckout: false),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.grey),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Text('إرجاع'),
+                          _buildOperationButton(
+                            l10n.checkIn,
+                            () => _showCheckInDialog(item),
+                            isPrimary: false,
                           ),
                           const SizedBox(width: 8),
-                          // زر استعارة (أزرق فاتح ممتلئ)
-                          ElevatedButton(
-                            onPressed: () =>
-                                _showOperationDialog(item, isCheckout: true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF90CAF9),
-                              foregroundColor: Colors.black, // نص أسود
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('استعارة'),
+                          _buildOperationButton(
+                            l10n.checkOut,
+                            () => _showCheckoutDialog(item),
+                            isPrimary: true,
                           ),
                         ],
                       ),
-                      // العنوان والكمية
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            data['name'],
+                            item['name'] ?? '',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
                           ),
+                          const SizedBox(height: 4),
                           Text(
                             'متاح: $available / $total',
                             style: const TextStyle(
@@ -233,7 +209,6 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen>
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // شريط التقدم (أخضر)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
@@ -254,45 +229,122 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen>
     );
   }
 
-  // نافذة العمليات
-  Future<void> _showOperationDialog(
-    DocumentSnapshot item, {
-    required bool isCheckout,
-  }) async {
-    final controller = TextEditingController();
-    final data = item.data() as Map<String, dynamic>;
-    final String title = isCheckout ? 'استعارة' : 'إرجاع';
-    final int maxQty = isCheckout
-        ? data['availableQuantity']
-        : (data['totalQuantity'] - data['availableQuantity']);
+  Widget _buildEmptyState() {
+    return EmptyStateWidget(
+      message: l10n.noInventoryItems,
+      imagePath: 'assets/illustrations/no_data.svg',
+    );
+  }
 
+  Widget _buildOperationButton(
+    String label,
+    VoidCallback onPressed, {
+    required bool isPrimary,
+  }) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isPrimary
+            ? const Color(0xFF8FA1B4)
+            : Colors.transparent,
+        foregroundColor: isPrimary ? Colors.black : const Color(0xFF8FA1B4),
+        side: isPrimary ? null : const BorderSide(color: Color(0xFF8FA1B4)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+        minimumSize: const Size(0, 36),
+        elevation: 0,
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+      ),
+    );
+  }
+
+  Future<void> _showCheckoutDialog(Map<String, dynamic> item) async {
+    final qtyController = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E2230),
         title: Text(
-          '$title ${data['name']}',
+          'استعارة: ${item['name']}',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: TextField(
+          controller: qtyController,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            labelText: l10n.quantityToCheckout,
+            labelStyle: const TextStyle(color: Colors.grey),
+            enabledBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              int qty = int.tryParse(qtyController.text) ?? 0;
+              if (qty > 0 && qty <= (item['availableQuantity'] ?? 0)) {
+                _updateInventory(item, qty, 0);
+                Navigator.pop(ctx);
+                showCustomSnackBar(
+                  context,
+                  l10n.checkoutSuccess,
+                  isError: false,
+                );
+              } else {
+                showCustomSnackBar(context, 'الكمية غير صالحة');
+              }
+            },
+            child: Text(l10n.checkOut),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCheckInDialog(Map<String, dynamic> item) async {
+    final returnController = TextEditingController();
+    final lostController = TextEditingController(text: '0');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2230),
+        title: Text(
+          'إرجاع: ${item['name']}',
           style: const TextStyle(color: Colors.white),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'الحد الأقصى: $maxQty',
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
             TextField(
-              controller: controller,
+              controller: returnController,
               keyboardType: TextInputType.number,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'الكمية',
-                hintStyle: const TextStyle(color: Colors.grey),
-                filled: true,
-                fillColor: Colors.black26,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                labelText: l10n.quantityToReturn,
+                labelStyle: const TextStyle(color: Colors.grey),
+                enabledBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey),
+                ),
+              ),
+            ),
+            TextField(
+              controller: lostController,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: l10n.quantityLost,
+                labelStyle: const TextStyle(color: Colors.grey),
+                enabledBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey),
                 ),
               ),
             ),
@@ -301,42 +353,73 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () {
-              final qty = int.tryParse(controller.text) ?? 0;
-              if (qty > 0 && qty <= maxQty) {
-                // تحديث المخزون
-                final newAvailable = isCheckout
-                    ? data['availableQuantity'] - qty
-                    : data['availableQuantity'] + qty;
-
-                item.reference.update({'availableQuantity': newAvailable});
-
-                // تسجيل العملية في السجل (Inventory Log)
-                FirebaseFirestore.instance.collection('inventory_log').add({
-                  'itemId': item.id,
-                  'itemName': data['name'],
-                  'userId': FirebaseAuth.instance.currentUser?.uid,
-                  'userName':
-                      FirebaseAuth.instance.currentUser?.displayName ?? 'Admin',
-                  'type': isCheckout ? 'checkout' : 'return',
-                  'quantity': qty,
-                  'date': Timestamp.now(),
-                });
-
-                Navigator.pop(ctx);
-                showCustomSnackBar(
-                  context,
-                  'تمت العملية بنجاح',
-                  isError: false,
-                );
-              } else {
-                showCustomSnackBar(context, 'الكمية غير صالحة');
-              }
+              int ret = int.tryParse(returnController.text) ?? 0;
+              int lost = int.tryParse(lostController.text) ?? 0;
+              _updateInventory(item, -ret, lost);
+              Navigator.pop(ctx);
+              showCustomSnackBar(context, l10n.returnSuccess, isError: false);
             },
-            child: const Text('تأكيد'),
+            child: Text(l10n.checkIn),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateInventory(
+    Map<String, dynamic> item,
+    int checkoutQty,
+    int lostQty,
+  ) async {
+    final int newAvailable =
+        (item['availableQuantity'] ?? 0) - checkoutQty - lostQty;
+    final int newTotal = (item['totalQuantity'] ?? 0) - lostQty;
+
+    await _apiService.updateInventoryItem(item['id'], {
+      'availableQuantity': newAvailable,
+      'totalQuantity': newTotal,
+    });
+
+    await _apiService.addInventoryLog({
+      'itemId': item['id'],
+      'itemName': item['name'],
+      'userId': currentUserId,
+      'userName': currentUserName,
+      'date': DateTime.now(),
+      'quantityCheckedOut': checkoutQty > 0 ? checkoutQty : 0,
+      'quantityReturned': checkoutQty < 0 ? -checkoutQty : 0,
+      'quantityLost': lostQty,
+    });
+  }
+
+  void _showDeleteDialog(String itemId, String itemName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2230),
+        title: Text(
+          l10n.confirmDeletion,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '${l10n.areYouSureDelete} $itemName?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () {
+              _apiService.deleteInventoryItem(itemId);
+              Navigator.pop(ctx);
+            },
+            child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),

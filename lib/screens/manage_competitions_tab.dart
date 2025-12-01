@@ -1,10 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/edit_competition_screen.dart';
 import 'package:drone_academy/screens/leaderboard_screen.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
-// --- تبويب إدارة المسابقات ---
 class ManageCompetitionsTab extends StatefulWidget {
   const ManageCompetitionsTab({super.key});
 
@@ -13,158 +12,81 @@ class ManageCompetitionsTab extends StatefulWidget {
 }
 
 class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
-  final _searchController = TextEditingController();
-  final ValueNotifier<String> _searchQuery = ValueNotifier('');
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(() {
-      _searchQuery.value = _searchController.text;
-    });
-  }
-
-  Future<void> _showCompetitionsForLeaderboard(BuildContext context) async {
-    final competitionsSnapshot = await FirebaseFirestore.instance
-        .collection('competitions')
-        .get();
-
-    if (!context.mounted) return;
-
-    final competitions = competitionsSnapshot.docs;
-    final l10n = AppLocalizations.of(context)!;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(l10n.selectCompetitionToViewLeaderboard),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: competitions.length,
-              itemBuilder: (context, index) {
-                final competition = competitions[index];
-                return ListTile(
-                  title: Text(competition['title']),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            LeaderboardScreen(competition: competition),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _searchQuery.dispose();
-    super.dispose();
-  }
+  final ApiService _apiService = ApiService();
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    const bgColor = Color(0xFF111318);
 
     return Scaffold(
+      backgroundColor: bgColor,
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: ValueListenableBuilder<String>(
-              valueListenable: _searchQuery,
-              builder: (context, value, child) {
-                return ElevatedButton.icon(
-                  onPressed: () => _showCompetitionsForLeaderboard(context),
-                  icon: const Icon(Icons.leaderboard),
-                  label: Text(l10n.leaderboard),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 40),
-                  ),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
             child: TextField(
-              controller: _searchController,
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                labelText: l10n.searchCompetition,
-                prefixIcon: const Icon(Icons.search),
+                hintText: l10n.searchCompetition,
+                hintStyle: const TextStyle(color: Colors.grey),
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: const Color(0xFF1E2230),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                ),
-                suffixIcon: ValueListenableBuilder<String>(
-                  valueListenable: _searchQuery,
-                  builder: (context, value, child) {
-                    if (value.isNotEmpty) {
-                      return IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => _searchController.clear(),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
+                  borderSide: BorderSide.none,
                 ),
               ),
+              onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('competitions')
-                  .snapshots(),
+            child: StreamBuilder<List<dynamic>>(
+              stream: _apiService.streamCompetitions(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting)
                   return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(child: Text(l10n.noActiveCompetitions));
-                }
+                final docs = snapshot.data ?? [];
 
-                final allCompetitions = snapshot.data!.docs;
-                final filteredCompetitions = allCompetitions.where((doc) {
-                  if (_searchQuery.value.isEmpty) {
-                    return true;
-                  }
-                  final title =
-                      (doc.data() as Map<String, dynamic>)['title']
-                          ?.toString()
-                          .toLowerCase() ??
-                      '';
-                  return title.contains(_searchQuery.value.toLowerCase());
-                }).toList();
+                final filtered = docs
+                    .where(
+                      (d) => d['title'].toString().toLowerCase().contains(
+                        _searchQuery.toLowerCase(),
+                      ),
+                    )
+                    .toList();
+
+                if (filtered.isEmpty)
+                  return Center(
+                    child: Text(
+                      l10n.noResultsFound,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  );
 
                 return ListView.builder(
-                  itemCount: filteredCompetitions.length,
+                  itemCount: filtered.length,
                   itemBuilder: (context, index) {
-                    final competition = filteredCompetitions[index];
+                    final comp = filtered[index];
                     return Card(
+                      color: const Color(0xFF1E2230),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: ListTile(
-                        title: Text(competition['title']),
+                        title: Text(
+                          comp['title'] ?? '',
+                          style: const TextStyle(color: Colors.white),
+                        ),
                         subtitle: Text(
-                          competition['isActive'] ? l10n.active : l10n.inactive,
+                          comp['isActive'] == true
+                              ? l10n.active
+                              : l10n.inactive,
                           style: TextStyle(
-                            color: competition['isActive']
+                            color: comp['isActive'] == true
                                 ? Colors.green
                                 : Colors.red,
                           ),
@@ -174,45 +96,12 @@ class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => EditCompetitionScreen(
-                                    competition: competition,
-                                  ),
-                                ),
-                              ),
+                              onPressed: () {},
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: Text(l10n.confirmDeletion),
-                                  content: Text(l10n.areYouSureDelete),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: Text(l10n.cancel),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        FirebaseFirestore.instance
-                                            .collection('competitions')
-                                            .doc(competition.id)
-                                            .delete();
-                                        Navigator.pop(context);
-                                      },
-                                      child: Text(
-                                        l10n.delete,
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              onPressed: () =>
+                                  _apiService.deleteCompetition(comp['id']),
                             ),
                           ],
                         ),
@@ -232,10 +121,10 @@ class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
             builder: (context) => const EditCompetitionScreen(),
           ),
         ),
-        child: const Icon(Icons.add),
-        tooltip: l10n.addCompetition,
-        backgroundColor: Colors.amber,
+        backgroundColor: const Color(0xFFFF9800),
+        child: const Icon(Icons.add, color: Colors.black),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 }

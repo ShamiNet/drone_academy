@@ -1,13 +1,12 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:typed_data';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:cropperx/cropperx.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-// 1. استيراد حزمة Cloudinary
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
-import 'dart:typed_data'; // مطلوب للتعامل مع بيانات الصورة
-import 'package:cropperx/cropperx.dart';
 
 class ProfileScreen extends StatefulWidget {
   final void Function(Locale) setLocale;
@@ -18,12 +17,14 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final ApiService _apiService = ApiService(); // الخدمة الجديدة
   final _nameController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser;
   late AppLocalizations l10n;
   String? _photoUrl;
   bool _isLoading = true;
   bool _isUploading = false;
+  final _cropKey = GlobalKey();
 
   @override
   void initState() {
@@ -33,22 +34,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadUserData() async {
     if (_currentUser != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser.uid)
-          .get();
-      setState(() {
-        _nameController.text = userDoc.data()?['displayName'] ?? '';
-        _photoUrl = userDoc.data()?['photoUrl'];
-        _isLoading = false;
-      });
+      // استخدام ApiService لجلب البيانات
+      final userData = await _apiService.fetchUser(_currentUser!.uid);
+
+      if (mounted) {
+        setState(() {
+          // إذا لم نجد بيانات، نستخدم بيانات المستخدم الافتراضية
+          _nameController.text =
+              userData?['displayName'] ?? _currentUser!.displayName ?? '';
+          _photoUrl = userData?['photoUrl'] ?? _currentUser!.photoURL;
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // --- ٢. تعديل دالة رفع الصورة لتستخدم CropperX ---
   Future<void> _pickAndUploadImage() async {
     l10n = AppLocalizations.of(context)!;
-    // افتراض أن 'currentUser' مُعرّف في الكلاس
     if (_currentUser == null) return;
 
     final imagePicker = ImagePicker();
@@ -61,11 +63,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final imageBytes = await pickedFile.readAsBytes();
 
-    // --- بداية التعديل: تعريف المفتاح هنا ---
-    final cropKey = GlobalKey();
-    // --- نهاية التعديل ---
-
-    // فتح شاشة القص
     final Uint8List? croppedBytes = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -76,9 +73,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               IconButton(
                 icon: const Icon(Icons.check),
                 onPressed: () async {
-                  // --- بداية التعديل: استخدام 'await' ---
-                  final cropped = await Cropper.crop(cropperKey: cropKey);
-                  // --- نهاية التعديل ---
+                  final cropped = await Cropper.crop(cropperKey: _cropKey);
                   Navigator.pop(context, cropped);
                 },
               ),
@@ -86,12 +81,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           body: Center(
             child: Cropper(
-              cropperKey: cropKey,
+              cropperKey: _cropKey,
               image: Image.memory(imageBytes),
-              // --- ٣. تعديل القص ليناسب الصورة الشخصية (دائري) ---
               overlayType: OverlayType.circle,
-              aspectRatio: 1.0, // مربع (ضروري للدائرة)
-              // --- نهاية التعديل ---
+              aspectRatio: 1.0,
             ),
           ),
         ),
@@ -104,10 +97,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final cloudinary = CloudinaryPublic('dvocrpapc', 'ml_default');
 
       try {
-        // --- بداية التعديل: استخدام 'currentUser' بدلاً من '_currentUser' ---
         final String fileName =
             'profile_pic_${_currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}';
-        // --- نهاية التعديل ---
 
         final CloudinaryResponse response = await cloudinary.uploadFile(
           CloudinaryFile.fromBytesData(
@@ -119,14 +110,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         final photoUrl = response.secureUrl;
 
-        // تحديث رابط الصورة في Firestore
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUser!.uid)
-            .update({'photoUrl': photoUrl});
+        // تحديث عبر ApiService
+        await _apiService.updateUser({
+          'uid': _currentUser!.uid,
+          'photoUrl': photoUrl,
+        });
 
-        // تحديث رابط الصورة في ملف مصادقة Firebase
+        // تحديث البروفايل المحلي في Firebase Auth (للتوافق)
         await _currentUser!.updatePhotoURL(photoUrl);
+
+        if (mounted) {
+          setState(() => _photoUrl = photoUrl);
+        }
       } catch (e) {
         print('Failed to upload image: $e');
       } finally {
@@ -137,38 +132,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _saveProfile() async {
     if (_nameController.text.isNotEmpty) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser!.uid)
-          .update({'displayName': _nameController.text});
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Profile saved!')));
-      Navigator.of(context).pop();
+      // تحديث عبر ApiService
+      await _apiService.updateUser({
+        'uid': _currentUser!.uid,
+        'displayName': _nameController.text,
+      });
+
+      // تحديث محلي
+      await _currentUser!.updateDisplayName(_nameController.text);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile saved!')));
+        Navigator.of(context).pop();
+      }
     }
   }
 
-  // --- دالة جديدة لتسجيل الخروج ---
   Future<void> _logout() async {
-    // التأكد من أن الـ context ما زال صالحاً قبل استخدامه
     if (!mounted) return;
-
-    // تسجيل الخروج من Firebase
     await FirebaseAuth.instance.signOut();
-
-    // العودة إلى شاشة تسجيل الدخول وإزالة كل الشاشات السابقة
     if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/', // العودة إلى المسار الرئيسي الذي يعرض شاشة الدخول
-        (Route<dynamic> route) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/', (Route<dynamic> route) => false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    // ... باقي الكود يبقى كما هو ...
+    l10n = AppLocalizations.of(context)!; // تأكد من تهيئة l10n
     return Scaffold(
       appBar: AppBar(title: Text(l10n.editProfile)),
       body: _isLoading
@@ -182,15 +176,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       CircleAvatar(
                         radius: 60,
                         backgroundImage:
-                            _photoUrl != null &&
-                                _photoUrl!
-                                    .isNotEmpty // --- التعديل هنا
+                            (_photoUrl != null && _photoUrl!.isNotEmpty)
                             ? CachedNetworkImageProvider(_photoUrl!)
                             : null,
-                        child: _photoUrl == null || _photoUrl!.isEmpty
+                        child: (_photoUrl == null || _photoUrl!.isEmpty)
                             ? const Icon(Icons.person, size: 60)
                             : null,
                       ),
+                      if (_isUploading)
+                        const Positioned.fill(
+                          child: CircularProgressIndicator(),
+                        ),
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -216,7 +212,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // --- بداية الكود المنقول ---
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: DropdownButtonFormField<Locale>(
@@ -245,7 +240,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-                  // --- نهاية الكود المنقول ---
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _saveProfile,
@@ -255,7 +249,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Text(l10n.saveChanges),
                   ),
                   const SizedBox(height: 16),
-                  // --- بداية الكود المنقول (زر تسجيل الخروج) ---
                   OutlinedButton.icon(
                     onPressed: _logout,
                     icon: const Icon(Icons.logout),
@@ -266,7 +259,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       side: const BorderSide(color: Colors.red),
                     ),
                   ),
-                  // --- نهاية الكود المنقول ---
                 ],
               ),
             ),

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:graphview/GraphView.dart';
@@ -17,10 +17,26 @@ class OrgChartScreen extends StatefulWidget {
 }
 
 class _OrgChartScreenState extends State<OrgChartScreen> {
+  final ApiService _apiService = ApiService(); // استخدام الخدمة
   late AppLocalizations l10n;
   final TransformationController _transformationController =
       TransformationController();
   final GlobalKey _chartKey = GlobalKey();
+
+  // متغير لتخزين البيانات وتحديثها
+  late Future<List<dynamic>> _nodesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshNodes();
+  }
+
+  void _refreshNodes() {
+    setState(() {
+      _nodesFuture = _apiService.fetchOrgNodes();
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -60,13 +76,15 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
       );
     } catch (e) {
       print('Error capturing or sharing PDF: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to generate PDF.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to generate PDF.')),
+        );
+      }
     }
   }
 
-  void _showNodeOptionsDialog(DocumentSnapshot nodeDoc) {
+  void _showNodeOptionsDialog(Map<String, dynamic> node) {
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -77,7 +95,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
               title: Text(l10n.editNode),
               onTap: () {
                 Navigator.pop(context);
-                _showEditOrAddNodeDialog(nodeDoc: nodeDoc);
+                _showEditOrAddNodeDialog(node: node);
               },
             ),
             ListTile(
@@ -85,7 +103,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
               title: Text(l10n.moveNode),
               onTap: () {
                 Navigator.pop(context);
-                _showChangeParentDialog(nodeDoc);
+                _showChangeParentDialog(node);
               },
             ),
             ListTile(
@@ -93,7 +111,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
               title: Text(l10n.addNodeBelow),
               onTap: () {
                 Navigator.pop(context);
-                _showEditOrAddNodeDialog(parentNodeId: nodeDoc.id);
+                _showEditOrAddNodeDialog(parentNodeId: node['id']);
               },
             ),
             ListTile(
@@ -104,7 +122,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteNodeDialog(nodeDoc);
+                _showDeleteNodeDialog(node);
               },
             ),
           ],
@@ -114,15 +132,15 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
   }
 
   void _showEditOrAddNodeDialog({
-    DocumentSnapshot? nodeDoc,
+    Map<String, dynamic>? node,
     String? parentNodeId,
   }) {
-    final bool isEditing = nodeDoc != null;
+    final bool isEditing = node != null;
     final nameController = TextEditingController(
-      text: isEditing ? nodeDoc['name'] : '',
+      text: isEditing ? node['name'] : '',
     );
     final roleController = TextEditingController(
-      text: isEditing ? nodeDoc['role'] : '',
+      text: isEditing ? node['role'] : '',
     );
 
     showDialog(
@@ -154,21 +172,21 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
                 final role = roleController.text;
                 if (name.isNotEmpty) {
                   if (isEditing) {
-                    await FirebaseFirestore.instance
-                        .collection('org_nodes')
-                        .doc(nodeDoc.id)
-                        .update({'name': name, 'role': role});
+                    await _apiService.updateOrgNode(node['id'], {
+                      'name': name,
+                      'role': role,
+                    });
                   } else {
-                    await FirebaseFirestore.instance
-                        .collection('org_nodes')
-                        .add({
-                          'name': name,
-                          'role': role,
-                          'parentId': parentNodeId,
-                        });
+                    await _apiService.addOrgNode({
+                      'name': name,
+                      'role': role,
+                      'parentId': parentNodeId,
+                    });
                   }
-                  Navigator.pop(context);
-                  setState(() {});
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _refreshNodes();
+                  }
                 }
               },
               child: Text(l10n.save),
@@ -179,12 +197,12 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
     );
   }
 
-  void _showDeleteNodeDialog(DocumentSnapshot nodeDoc) {
+  void _showDeleteNodeDialog(Map<String, dynamic> node) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.confirmDeletion),
-        content: Text("${l10n.areYouSureDelete} (${nodeDoc['name']})"),
+        content: Text("${l10n.areYouSureDelete} (${node['name']})"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -192,12 +210,11 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
           ),
           TextButton(
             onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('org_nodes')
-                  .doc(nodeDoc.id)
-                  .delete();
-              Navigator.pop(context);
-              setState(() {});
+              await _apiService.deleteOrgNode(node['id']);
+              if (mounted) {
+                Navigator.pop(context);
+                _refreshNodes();
+              }
             },
             child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
           ),
@@ -206,20 +223,23 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
     );
   }
 
-  void _showChangeParentDialog(DocumentSnapshot nodeToMove) async {
-    final allNodesSnapshot = await FirebaseFirestore.instance
-        .collection('org_nodes')
-        .get();
-    final potentialParents = allNodesSnapshot.docs
-        .where((doc) => doc.id != nodeToMove.id)
+  void _showChangeParentDialog(Map<String, dynamic> nodeToMove) async {
+    // جلب القائمة الحالية لاستبعاد العقدة نفسها
+    final allNodes = await _apiService.fetchOrgNodes();
+    final potentialParents = allNodes
+        .where((doc) => doc['id'] != nodeToMove['id'])
         .toList();
 
     if (potentialParents.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.noOtherNodesAvailable)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.noOtherNodesAvailable)));
+      }
       return;
     }
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -235,13 +255,14 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
                 final parentNode = potentialParents[index];
                 return ListTile(
                   title: Text(parentNode['name']),
-                  onTap: () {
-                    FirebaseFirestore.instance
-                        .collection('org_nodes')
-                        .doc(nodeToMove.id)
-                        .update({'parentId': parentNode.id});
-                    Navigator.of(context).pop();
-                    _showSuccessAndReload();
+                  onTap: () async {
+                    await _apiService.updateOrgNode(nodeToMove['id'], {
+                      'parentId': parentNode['id'],
+                    });
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                      _showSuccessAndReload();
+                    }
                   },
                 );
               },
@@ -265,7 +286,7 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
         duration: Duration(seconds: 1),
       ),
     );
-    setState(() {});
+    _refreshNodes();
   }
 
   @override
@@ -281,13 +302,13 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<QuerySnapshot>(
-        future: FirebaseFirestore.instance.collection('org_nodes').get(),
+      body: FutureBuilder<List<dynamic>>(
+        future: _nodesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(
               child: ElevatedButton(
                 onPressed: () => _showEditOrAddNodeDialog(parentNodeId: ''),
@@ -298,24 +319,25 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
 
           final graph = Graph();
           final Map<String, Node> nodesMap = {};
-          final Map<String, DocumentSnapshot> docsMap = {
-            for (var doc in snapshot.data!.docs) doc.id: doc,
+          final Map<String, Map<String, dynamic>> docsMap = {
+            for (var doc in snapshot.data!) doc['id']: doc,
           };
 
-          for (var doc in snapshot.data!.docs) {
-            final id = doc.id;
+          // إنشاء العقد (Nodes)
+          for (var doc in snapshot.data!) {
+            final id = doc['id'];
             final node = Node.Id(id);
             nodesMap[id] = node;
             graph.addNode(node);
           }
 
-          for (var doc in snapshot.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            final parentId = data['parentId'] as String?;
+          // إنشاء الروابط (Edges)
+          for (var doc in snapshot.data!) {
+            final parentId = doc['parentId'] as String?;
             if (parentId != null &&
                 parentId.isNotEmpty &&
                 nodesMap.containsKey(parentId)) {
-              graph.addEdge(nodesMap[parentId]!, nodesMap[doc.id]!);
+              graph.addEdge(nodesMap[parentId]!, nodesMap[doc['id']]!);
             }
           }
 
@@ -344,11 +366,10 @@ class _OrgChartScreenState extends State<OrgChartScreen> {
                       if (!docsMap.containsKey(docId)) {
                         return Container();
                       }
-                      final doc = docsMap[docId]!;
-                      final data = doc.data() as Map<String, dynamic>;
+                      final data = docsMap[docId]!;
 
                       return GestureDetector(
-                        onTap: () => _showNodeOptionsDialog(doc),
+                        onTap: () => _showNodeOptionsDialog(data),
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(

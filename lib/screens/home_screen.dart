@@ -1,21 +1,19 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_dashboard.dart';
+import 'package:drone_academy/screens/equipment_checkout_screen.dart';
 import 'package:drone_academy/screens/inventory_screen.dart';
 import 'package:drone_academy/screens/my_progress_screen.dart';
 import 'package:drone_academy/screens/profile_screen.dart';
 import 'package:drone_academy/screens/trainee_competitions_screen.dart';
 import 'package:drone_academy/screens/trainee_dashboard.dart';
 import 'package:drone_academy/screens/trainer_dashboard.dart';
-import 'package:flutter/material.dart';
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:drone_academy/screens/equipment_checkout_screen.dart';
+import 'package:flutter/material.dart';
 
-// Added fallback ThemeService definition to avoid undefined name error.
 class ThemeService {
   static Future<void> saveThemeMode(ThemeMode mode) async {
-    // Persist theme mode here if desired (e.g., SharedPreferences).
     debugPrint('Theme mode saved: ${mode.name}');
   }
 }
@@ -30,9 +28,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // ignore: unused_field
+  final ApiService _apiService = ApiService();
   String? _userName;
-  String? _userRole; // القيمة الافتراضية ستعالج في الأسفل
+  String? _userRole;
   String? _photoUrl;
   bool _isLoading = true;
 
@@ -43,60 +41,43 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchUserData() async {
-    debugPrint('🏠 [HOME] Start fetching user data...');
     final user = FirebaseAuth.instance.currentUser;
 
     if (user != null) {
-      debugPrint('🏠 [HOME] Current User ID: ${user.uid}');
       try {
-        final docSnapshot = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
+        // استخدام ApiService
+        final userData = await _apiService.fetchUser(user.uid);
 
         if (mounted) {
-          if (docSnapshot.exists) {
-            debugPrint('🏠 [HOME] User Document FOUND.');
-            final data = docSnapshot.data();
+          if (userData != null) {
             setState(() {
-              _userName = data?['displayName'];
-              _userRole = data?['role'];
-              _photoUrl = data?['photoUrl'];
-              _isLoading = false; // إيقاف التحميل
+              _userName = userData['displayName'];
+              _userRole = userData['role'];
+              _photoUrl = userData['photoUrl'];
+              _isLoading = false;
             });
-            debugPrint('🏠 [HOME] Role: $_userRole');
           } else {
-            debugPrint('⚠️ [HOME] User Document NOT FOUND in Firestore!');
-            // حالة خاصة: المستخدم مسجل دخول ولكن ليس لديه ملف بيانات
-            // سنعطيه دور افتراضي (متدرب) لنسمح له بالدخول
             setState(() {
               _userRole = 'trainee';
               _userName = user.displayName ?? 'User';
-              _isLoading = false; // إيقاف التحميل ضروري هنا!
+              _isLoading = false;
             });
           }
         }
       } catch (e) {
-        debugPrint("🔴 [HOME] Error fetching user data: $e");
         if (mounted) {
           setState(() {
-            _isLoading = false; // إيقاف التحميل عند الخطأ
-            _userRole = 'trainee'; // دور افتراضي عند الخطأ
+            _isLoading = false;
+            _userRole = 'trainee';
           });
         }
       }
     } else {
-      debugPrint('🔴 [HOME] User is null!');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Widget _buildBody(AppLocalizations l10n) {
-    // سجل الدور لبناء الواجهة
-    debugPrint('🏠 [HOME] Building body for role: $_userRole');
-    // دعم دور المالك والمدير للوصول إلى لوحة الإدارة
     if (_userRole == 'owner' || _userRole == 'admin') {
       return const AdminDashboard();
     } else if (_userRole == 'trainer') {
@@ -134,7 +115,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     } else {
-      // حالة احتياطية إذا لم يتم تحديد الدور
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -161,7 +141,6 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(_isLoading ? l10n.loading : l10n.home),
         actions: [
-          // تبديل الثيم بسرعة من شريط العنوان
           IconButton(
             tooltip: brightness == Brightness.dark ? 'وضع نهاري' : 'وضع ليلي',
             icon: Icon(
@@ -173,7 +152,6 @@ class _HomeScreenState extends State<HomeScreen> {
               final newMode = brightness == Brightness.dark
                   ? ThemeMode.light
                   : ThemeMode.dark;
-              // استدعاء الضبط المركزي لضمان تطبيق فوري على MaterialApp
               widget.setThemeMode?.call(newMode);
               await ThemeService.saveThemeMode(newMode);
             },
@@ -205,14 +183,12 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               tooltip: l10n.myProgress,
               icon: const Icon(Icons.bar_chart),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const MyProgressScreen(),
-                  ),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MyProgressScreen(),
+                ),
+              ),
             ),
         ],
       ),

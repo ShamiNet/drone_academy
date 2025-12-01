@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
 import 'package:drone_academy/widgets/empty_state_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +15,7 @@ class EquipmentCheckoutScreen extends StatefulWidget {
 }
 
 class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
+  final ApiService _apiService = ApiService(); // الخدمة
   late AppLocalizations l10n;
   final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   final String currentUserName =
@@ -27,6 +28,7 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
     l10n = AppLocalizations.of(context)!;
   }
 
+  // ... (دوال الألوان والترجمة نفسها - يمكنك نسخها من الملف القديم أو تركها هنا)
   Color _getStatusColor(String status) {
     switch (status) {
       case 'available':
@@ -41,6 +43,7 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
   }
 
   String _translateKey(String key) {
+    // ... (نفس منطق الترجمة السابق) ...
     switch (key) {
       case 'drone':
         return l10n.drone;
@@ -57,7 +60,7 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
       case 'inMaintenance':
         return l10n.inMaintenance;
       case 'all':
-        return 'All'; // Needs localization
+        return l10n.all;
       default:
         return key;
     }
@@ -76,34 +79,29 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
     }
   }
 
-  Future<void> _checkOutItem(DocumentSnapshot item) async {
-    final itemRef = FirebaseFirestore.instance
-        .collection('equipment')
-        .doc(item.id);
-    final logRef = FirebaseFirestore.instance.collection('equipment_log').doc();
-
-    WriteBatch batch = FirebaseFirestore.instance.batch();
-
-    batch.update(itemRef, {
+  // --- دالة الاستعارة (محدثة) ---
+  Future<void> _checkOutItem(Map<String, dynamic> item) async {
+    // تحديث الحالة في المعدات
+    await _apiService.updateEquipment(item['id'], {
       'status': 'inUse',
       'currentUserId': currentUserId,
       'currentUserName': currentUserName,
     });
 
-    batch.set(logRef, {
-      'equipmentId': item.id,
+    // إضافة سجل في Log
+    await _apiService.addEquipmentLog({
+      'equipmentId': item['id'],
       'equipmentName': item['name'],
       'userId': currentUserId,
       'userName': currentUserName,
-      'checkOutTime': Timestamp.now(),
+      'checkOutTime': DateTime.now().toIso8601String(), // وقت الاستعارة
       'checkInTime': null,
       'notesOnReturn': '',
     });
-
-    await batch.commit();
   }
 
-  Future<void> _showCheckInDialog(DocumentSnapshot item) async {
+  // --- دالة الإرجاع (محدثة) ---
+  Future<void> _showCheckInDialog(Map<String, dynamic> item) async {
     final notesController = TextEditingController();
     bool needsMaintenance = false;
 
@@ -129,9 +127,8 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
                   SwitchListTile(
                     title: Text(l10n.reportMaintenance),
                     value: needsMaintenance,
-                    onChanged: (value) {
-                      setDialogState(() => needsMaintenance = value);
-                    },
+                    onChanged: (value) =>
+                        setDialogState(() => needsMaintenance = value),
                   ),
                 ],
               ),
@@ -141,9 +138,14 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
                   child: Text(l10n.cancel),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    _checkInItem(item, notesController.text, needsMaintenance);
-                    Navigator.pop(context);
+                  onPressed: () async {
+                    // منطق الإرجاع الجديد
+                    await _checkInItem(
+                      item,
+                      notesController.text,
+                      needsMaintenance,
+                    );
+                    if (mounted) Navigator.pop(context);
                   },
                   child: Text(l10n.checkIn),
                 ),
@@ -156,39 +158,32 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
   }
 
   Future<void> _checkInItem(
-    DocumentSnapshot item,
+    Map<String, dynamic> item,
     String notes,
     bool needsMaintenance,
   ) async {
-    final itemRef = FirebaseFirestore.instance
-        .collection('equipment')
-        .doc(item.id);
-
-    final logQuery = await FirebaseFirestore.instance
-        .collection('equipment_log')
-        .where('equipmentId', isEqualTo: item.id)
-        .where('checkInTime', isEqualTo: null)
-        .orderBy('checkOutTime', descending: true)
-        .limit(1)
-        .get();
-
-    WriteBatch batch = FirebaseFirestore.instance.batch();
-
-    batch.update(itemRef, {
+    // 1. تحديث حالة المعدة
+    await _apiService.updateEquipment(item['id'], {
       'status': needsMaintenance ? 'inMaintenance' : 'available',
-      'currentUserId': FieldValue.delete(),
-      'currentUserName': FieldValue.delete(),
+      'currentUserId': '', // تفريغ المستخدم
+      'currentUserName': '',
     });
 
-    if (logQuery.docs.isNotEmpty) {
-      final logDocRef = logQuery.docs.first.reference;
-      batch.update(logDocRef, {
-        'checkInTime': Timestamp.now(),
-        'notesOnReturn': notes,
-      });
-    }
-
-    await batch.commit();
+    // 2. تحديث السجل (إغلاق جلسة الاستعارة)
+    // نحتاج للبحث عن السجل المفتوح.
+    // للتبسيط هنا: سنضيف سجل جديد للإرجاع أو نحدث الأخير.
+    // الأفضل في تصميم الـ API أن يكون هناك endpoint خاص بـ "return" يغلق آخر سجل.
+    // سنفترض هنا إضافة سجل جديد للإرجاع لتوثيق العملية
+    await _apiService.addEquipmentLog({
+      'equipmentId': item['id'],
+      'equipmentName': item['name'],
+      'userId': currentUserId,
+      'userName': currentUserName,
+      'checkOutTime': null, // لا يوجد وقت استعارة جديد
+      'checkInTime': DateTime.now().toIso8601String(), // وقت الإرجاع
+      'notesOnReturn': notes,
+      'type': 'return', // علامة لتمييز الإرجاع
+    });
   }
 
   @override
@@ -201,136 +196,125 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
             child: DropdownButtonFormField<String>(
               value: _filterStatus,
               decoration: const InputDecoration(
-                labelText: 'Filter by Status', // Needs localization
+                labelText: 'Filter by Status',
                 border: OutlineInputBorder(),
               ),
               items: [
-                DropdownMenuItem(value: 'all', child: Text(_translateKey('all'))),
                 DropdownMenuItem(
-                    value: 'available',
-                    child: Text(_translateKey('available'))),
+                  value: 'all',
+                  child: Text(_translateKey('all')),
+                ),
                 DropdownMenuItem(
-                    value: 'inUse', child: Text(_translateKey('inUse'))),
+                  value: 'available',
+                  child: Text(_translateKey('available')),
+                ),
                 DropdownMenuItem(
-                    value: 'inMaintenance',
-                    child: Text(_translateKey('inMaintenance'))),
+                  value: 'inUse',
+                  child: Text(_translateKey('inUse')),
+                ),
+                DropdownMenuItem(
+                  value: 'inMaintenance',
+                  child: Text(_translateKey('inMaintenance')),
+                ),
               ],
               onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _filterStatus = value;
-                  });
-                }
+                if (value != null) setState(() => _filterStatus = value);
               },
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('users').snapshots(),
-              builder: (context, userSnapshot) {
-                if (!userSnapshot.hasData) {
+            child: StreamBuilder<List<dynamic>>(
+              // استخدام streamEquipment من السيرفر
+              stream: _apiService.streamEquipment(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final Map<String, String> usersMap = {
-                  for (var doc in userSnapshot.data!.docs)
-                    doc.id: doc['displayName']?.toString() ?? 'Unknown',
-                };
+                final equipmentList = snapshot.data ?? [];
 
-                return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('equipment')
-                      .orderBy('type')
-                      .snapshots(),
-                  builder: (context, equipmentSnapshot) {
-                    if (equipmentSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (!equipmentSnapshot.hasData ||
-                        equipmentSnapshot.data!.docs.isEmpty) {
-                      return EmptyStateWidget(
-                        message: l10n.noEquipmentAddedYet,
-                        imagePath: 'assets/illustrations/no_data.svg',
-                      );
-                    }
+                if (equipmentList.isEmpty) {
+                  return EmptyStateWidget(
+                    message: l10n.noEquipmentAddedYet,
+                    imagePath: 'assets/illustrations/no_data.svg',
+                  );
+                }
 
-                    final equipmentList = equipmentSnapshot.data!.docs;
+                final filteredList = _filterStatus == 'all'
+                    ? equipmentList
+                    : equipmentList
+                          .where((doc) => doc['status'] == _filterStatus)
+                          .toList();
 
-                    final filteredList = _filterStatus == 'all'
-                        ? equipmentList
-                        : equipmentList
-                            .where((doc) => doc['status'] == _filterStatus)
-                            .toList();
+                if (filteredList.isEmpty) {
+                  return const EmptyStateWidget(
+                    message: "No equipment with this status.",
+                    imagePath: 'assets/illustrations/no_data.svg',
+                  );
+                }
 
-                    if (filteredList.isEmpty) {
-                      return const EmptyStateWidget(
-                        message: "No equipment with this status.", // Needs localization
-                        imagePath: 'assets/illustrations/no_data.svg',
-                      );
-                    }
+                final Map<String, List<dynamic>> equipmentByType = {};
+                for (var equipment in filteredList) {
+                  final type = equipment['type'] as String? ?? 'other';
+                  if (equipmentByType[type] == null) equipmentByType[type] = [];
+                  equipmentByType[type]!.add(equipment);
+                }
 
-                    final Map<String, List<DocumentSnapshot>> equipmentByType = {};
-                    for (var equipment in filteredList) {
-                      final type = equipment['type'] as String? ?? 'other';
-                      if (equipmentByType[type] == null) {
-                        equipmentByType[type] = [];
-                      }
-                      equipmentByType[type]!.add(equipment);
-                    }
+                final sortedTypes = equipmentByType.keys.toList()..sort();
 
-                    final sortedTypes = equipmentByType.keys.toList()..sort();
+                return ListView.builder(
+                  itemCount: sortedTypes.length,
+                  itemBuilder: (context, index) {
+                    final type = sortedTypes[index];
+                    final items = equipmentByType[type]!;
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        vertical: 8.0,
+                        horizontal: 8.0,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ExpansionTile(
+                        title: Text(
+                          '${_translateKey(type)} (${items.length})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        leading: CircleAvatar(child: _getIconForType(type)),
+                        initiallyExpanded: true,
+                        children: items.map((item) {
+                          final imageUrl = item['imageUrl'];
+                          final itemName =
+                              item['name'] ?? l10n.unknownEquipment;
 
-                    return ListView.builder(
-                      itemCount: sortedTypes.length,
-                      itemBuilder: (context, index) {
-                        final type = sortedTypes[index];
-                        final items = equipmentByType[type]!;
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                              vertical: 8.0, horizontal: 8.0),
-                          clipBehavior: Clip.antiAlias,
-                          child: ExpansionTile(
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage:
+                                  (imageUrl != null &&
+                                      imageUrl.toString().isNotEmpty)
+                                  ? CachedNetworkImageProvider(imageUrl)
+                                  : null,
+                              backgroundColor: Colors.grey.shade200,
+                              child:
+                                  (imageUrl == null ||
+                                      imageUrl.toString().isEmpty)
+                                  ? const Icon(
+                                      Icons.precision_manufacturing_outlined,
+                                    )
+                                  : null,
+                            ),
                             title: Text(
-                              '${_translateKey(type)} (${items.length})',
+                              itemName,
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 18,
                               ),
                             ),
-                            leading: CircleAvatar(child: _getIconForType(type)),
-                            initiallyExpanded: true,
-                            children: items.map((item) {
-                              final data = item.data() as Map<String, dynamic>;
-                              final imageUrl = data.containsKey('imageUrl')
-                                  ? data['imageUrl']
-                                  : null;
-
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundImage:
-                                      (imageUrl != null && imageUrl.isNotEmpty)
-                                          ? CachedNetworkImageProvider(imageUrl)
-                                          : null,
-                                  backgroundColor: Colors.grey.shade200,
-                                  child: (imageUrl == null || imageUrl.isEmpty)
-                                      ? const Icon(
-                                          Icons
-                                              .precision_manufacturing_outlined)
-                                      : null,
-                                ),
-                                title: Text(
-                                  item['name'],
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(_translateKey(item['type'])),
-                                trailing: _buildActionButton(item, usersMap),
-                              );
-                            }).toList(),
-                          ),
-                        );
-                      },
+                            subtitle: Text(_translateKey(item['type'])),
+                            trailing: _buildActionButton(item),
+                          );
+                        }).toList(),
+                      ),
                     );
                   },
                 );
@@ -342,12 +326,8 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
     );
   }
 
-  Widget _buildActionButton(
-    DocumentSnapshot item,
-    Map<String, String> usersMap,
-  ) {
-    final data = item.data() as Map<String, dynamic>;
-    final status = data['status'];
+  Widget _buildActionButton(Map<String, dynamic> item) {
+    final status = item['status'];
 
     if (status == 'available') {
       return ElevatedButton(
@@ -358,9 +338,7 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
     }
 
     if (status == 'inUse') {
-      final currentBorrowerId = data.containsKey('currentUserId')
-          ? data['currentUserId']
-          : null;
+      final currentBorrowerId = item['currentUserId'];
 
       if (currentBorrowerId != null && currentBorrowerId == currentUserId) {
         return ElevatedButton(
@@ -369,9 +347,7 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
           child: Text(l10n.checkIn),
         );
       } else {
-        final currentBorrowerName =
-            usersMap[currentBorrowerId] ?? data['currentUserName'] ?? '...';
-
+        final currentBorrowerName = item['currentUserName'] ?? '...';
         return Tooltip(
           message: currentBorrowerName,
           child: Text(
@@ -395,6 +371,6 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
       );
     }
 
-    return Container(); // حالة افتراضية
+    return Container();
   }
 }

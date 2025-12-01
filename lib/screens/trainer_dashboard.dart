@@ -1,6 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/trainee_profile_screen.dart';
+// -------------------------------------------
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:drone_academy/widgets/empty_state_widget.dart';
 
@@ -15,6 +17,7 @@ class TrainerDashboard extends StatefulWidget {
 }
 
 class _TrainerDashboardState extends State<TrainerDashboard> {
+  final ApiService _apiService = ApiService();
   String _searchQuery = '';
   final _searchController = TextEditingController();
 
@@ -36,18 +39,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // --- بداية التعديل: بناء الاستعلام بشكل ديناميكي ---
-    Query query = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'trainee');
-
-    // أضف شرط البحث فقط إذا كان هناك نص
-    if (_searchQuery.isNotEmpty) {
-      query = query
-          .where('displayName', isGreaterThanOrEqualTo: _searchQuery)
-          .where('displayName', isLessThan: '${_searchQuery}z');
-    }
-    // --- نهاية التعديل ---
+    final l10n = AppLocalizations.of(context)!;
 
     return Column(
       children: [
@@ -57,15 +49,20 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
             children: [
               TextField(
                 controller: _searchController,
+                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.searchTrainee,
-                  prefixIcon: const Icon(Icons.search),
+                  labelText: l10n.searchTrainee,
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  enabledBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear),
+                          icon: const Icon(Icons.clear, color: Colors.grey),
                           onPressed: () => _searchController.clear(),
                         )
                       : null,
@@ -76,7 +73,9 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                 alignment: Alignment.centerRight,
                 child: DropdownButton<Locale>(
                   value: Localizations.localeOf(context),
-                  icon: const Icon(Icons.language),
+                  dropdownColor: const Color(0xFF1E2230),
+                  style: const TextStyle(color: Colors.white),
+                  icon: const Icon(Icons.language, color: Colors.white),
                   onChanged: (Locale? newLocale) {
                     if (newLocale != null && widget.onLocaleChange != null) {
                       widget.onLocaleChange!(newLocale);
@@ -93,48 +92,76 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
           ),
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            // استخدام الاستعلام الذي أنشأناه
-            stream: query.snapshots(),
+          child: StreamBuilder<List<dynamic>>(
+            stream: _apiService.streamUsers(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              final users = snapshot.data ?? [];
+
+              // تصفية المتدربين فقط + البحث
+              final trainees = users.where((u) {
+                final role = u['role'];
+                if (role != 'trainee') return false;
+
+                final name = (u['displayName'] ?? '').toString().toLowerCase();
+                return name.contains(_searchQuery.toLowerCase());
+              }).toList();
+
+              if (trainees.isEmpty) {
                 return EmptyStateWidget(
-                  message: AppLocalizations.of(context)!.noTrainees,
+                  message: l10n.noTrainees,
                   imagePath: 'assets/illustrations/no_data.svg',
                 );
               }
 
-              final trainees = snapshot.data!.docs;
-
               return ListView.builder(
                 itemCount: trainees.length,
                 itemBuilder: (context, index) {
-                  final trainee = trainees[index];
-                  final name =
-                      trainee['displayName'] ??
-                      AppLocalizations.of(context)!.addTrainingResult;
+                  final trainee = trainees[index]; // Map<String, dynamic>
+                  final name = trainee['displayName'] ?? 'Unknown';
                   final email = trainee['email'] ?? 'No Email';
+                  final photoUrl = trainee['photoUrl'];
 
                   return Card(
+                    color: const Color(0xFF1E2230),
                     margin: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 4,
                     ),
                     child: ListTile(
-                      leading: const Icon(Icons.person),
-                      title: Text(name),
-                      subtitle: Text(email),
-                      trailing: const Icon(Icons.arrow_forward_ios),
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.grey.shade800,
+                        backgroundImage:
+                            (photoUrl != null && photoUrl.toString().isNotEmpty)
+                            ? CachedNetworkImageProvider(photoUrl)
+                            : null,
+                        child: (photoUrl == null || photoUrl.toString().isEmpty)
+                            ? const Icon(Icons.person, color: Colors.white)
+                            : null,
+                      ),
+                      title: Text(
+                        name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        email,
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.grey,
+                        size: 16,
+                      ),
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                TraineeProfileScreen(traineeData: trainee),
+                            builder: (context) => TraineeProfileScreen(
+                              traineeData: trainee,
+                            ), // تمرير الـ Map مباشرة
                           ),
                         );
                       },

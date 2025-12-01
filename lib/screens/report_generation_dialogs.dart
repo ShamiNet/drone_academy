@@ -7,6 +7,7 @@ import 'package:drone_academy/models/pdf_report_data.dart';
 import 'package:drone_academy/services/ai_analyzer_service.dart';
 import 'package:drone_academy/utils/pdf_generator.dart';
 import 'package:drone_academy/utils/snackbar_helper.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // هام: لجلب اسم المستخدم
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -27,8 +28,8 @@ Future<void> generateAllTraineesReport(BuildContext context) async {
 
     if (selectedTraineeIds != null && selectedTraineeIds.isNotEmpty) {
       if (context.mounted) {
-        // سؤال عن AI فقط
-        await _showAiInclusionDialog(context, selectedTraineeIds);
+        // نظهر حوار الخيارات بدلاً من الحوار البسيط
+        await _showReportOptionsDialog(context, selectedTraineeIds);
       }
     }
   }
@@ -156,56 +157,81 @@ Future<List<String>?> _showTraineeSelectionDialog(
   );
 }
 
-Future<void> _showAiInclusionDialog(
+// --- حوار الخيارات الجديد ---
+Future<void> _showReportOptionsDialog(
   BuildContext context,
   List<String> selectedTraineeIds,
 ) async {
   final l10n = AppLocalizations.of(context)!;
+  bool includeAi = false;
+  bool showWatermark = true;
 
   return showDialog<void>(
     context: context,
     builder: (BuildContext dialogContext) {
-      return AlertDialog(
-        backgroundColor: const Color(0xFF1E2230),
-        title: Text(
-          l10n.comprehensiveReport,
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          l10n.includeAiAnalysis,
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: Text(
-              l10n.withoutAiAnalysis,
-              style: const TextStyle(color: Colors.grey),
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E2230),
+            title: const Text(
+              'خيارات التقرير',
+              style: TextStyle(color: Colors.white),
             ),
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              _processAndShowSuccessDialog(
-                context,
-                selectedTraineeIds,
-                includeAiAnalysis: false,
-              );
-            },
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8FA1B4),
-              foregroundColor: Colors.black,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  title: Text(
+                    l10n.includeAiAnalysis,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'قد يستغرق وقتاً أطول',
+                    style: TextStyle(color: Colors.grey, fontSize: 10),
+                  ),
+                  value: includeAi,
+                  activeColor: const Color(0xFF8FA1B4),
+                  onChanged: (val) => setState(() => includeAi = val),
+                ),
+                SwitchListTile(
+                  title: const Text(
+                    'إظهار العلامة المائية',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  value: showWatermark,
+                  activeColor: const Color(0xFF8FA1B4),
+                  onChanged: (val) => setState(() => showWatermark = val),
+                ),
+              ],
             ),
-            child: Text(l10n.withAiAnalysis),
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              _processAndShowSuccessDialog(
-                context,
-                selectedTraineeIds,
-                includeAiAnalysis: true,
-              );
-            },
-          ),
-        ],
+            actions: <Widget>[
+              TextButton(
+                child: Text(
+                  l10n.cancel,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8FA1B4),
+                  foregroundColor: Colors.black,
+                ),
+                child: const Text('إنشاء التقرير'),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  // نمرر كل الخيارات
+                  _processAndShowSuccessDialog(
+                    context,
+                    selectedTraineeIds,
+                    includeAiAnalysis: includeAi,
+                    showWatermark: showWatermark,
+                  );
+                },
+              ),
+            ],
+          );
+        },
       );
     },
   );
@@ -215,8 +241,11 @@ Future<void> _processAndShowSuccessDialog(
   BuildContext context,
   List<String> selectedTraineeIds, {
   required bool includeAiAnalysis,
+  required bool showWatermark, // معلمة جديدة
 }) async {
   final l10n = AppLocalizations.of(context)!;
+  final currentUser = FirebaseAuth.instance.currentUser;
+  final creatorName = currentUser?.displayName ?? 'Admin'; // اسم المنشئ
 
   showDialog(
     context: context,
@@ -350,7 +379,12 @@ Future<void> _processAndShowSuccessDialog(
       );
     }
 
-    final pdfDoc = await createAllTraineesPdfDocument(allTraineesData);
+    // --- هنا تم إصلاح الاستدعاء بتمرير الوسائط المفقودة ---
+    final pdfDoc = await createAllTraineesPdfDocument(
+      allTraineesData,
+      creatorName: creatorName, // اسم المنشئ
+      showWatermark: showWatermark, // خيار العلامة المائية
+    );
 
     if (context.mounted) {
       Navigator.of(context).pop();

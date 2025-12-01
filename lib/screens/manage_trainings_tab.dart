@@ -1,6 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/edit_training_screen.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
 class ManageTrainingsTab extends StatefulWidget {
@@ -11,12 +11,12 @@ class ManageTrainingsTab extends StatefulWidget {
 }
 
 class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
+  final ApiService _apiService = ApiService();
   String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // نفس لون الخلفية ليتطابق مع الواجهة الرئيسية
     const bgColor = Color(0xFF111318);
 
     return Scaffold(
@@ -26,7 +26,7 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
-              style: const TextStyle(color: Colors.white), // لون نص الكتابة
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'ابحث عن تدريب...',
                 hintStyle: const TextStyle(color: Colors.grey),
@@ -42,24 +42,21 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('trainings')
-                  .snapshots(),
+            child: StreamBuilder<List<dynamic>>(
+              stream: _apiService.streamTrainings(), // استخدام السيرفر
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting)
                   return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+
+                final docs = snapshot.data ?? [];
+                if (docs.isEmpty)
                   return Center(
                     child: Text(
                       l10n.noTrainingsAvailable,
                       style: const TextStyle(color: Colors.grey),
                     ),
                   );
-                }
 
-                final docs = snapshot.data!.docs;
                 final filtered = docs
                     .where(
                       (d) => d['title'].toString().toLowerCase().contains(
@@ -68,7 +65,7 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
                     )
                     .toList();
 
-                final Map<int, List<DocumentSnapshot>> grouped = {};
+                final Map<int, List<dynamic>> grouped = {};
                 for (var d in filtered) {
                   final lvl = d['level'] as int? ?? 0;
                   grouped.putIfAbsent(lvl, () => []).add(d);
@@ -110,21 +107,35 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
                           children: grouped[level]!.map((doc) {
                             return ListTile(
                               title: Text(
-                                doc['title'],
+                                doc['title'] ?? '',
                                 style: const TextStyle(color: Colors.white),
                               ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
-                                ),
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        EditTrainingScreen(training: doc),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blue,
+                                    ),
+                                    // ملاحظة: EditTrainingScreen تم تحديثه مسبقاً ليقبل Map
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            EditTrainingScreen(training: doc),
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () =>
+                                        _apiService.deleteTraining(doc['id']),
+                                  ),
+                                ],
                               ),
                             );
                           }).toList(),
@@ -138,17 +149,15 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
           ),
         ],
       ),
-      // --- هنا تمت إضافة الزر ليعمل ---
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const EditTrainingScreen()),
         ),
-        backgroundColor: const Color(0xFFFF9800), // اللون البرتقالي
+        backgroundColor: const Color(0xFFFF9800),
         child: const Icon(Icons.add, color: Colors.black),
       ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.startFloat, // أقصى اليسار
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 }

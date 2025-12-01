@@ -1,48 +1,60 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math' as math;
 import 'package:drone_academy/models/pdf_report_data.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-// --- ثوابت الألوان ---
 const PdfColor kPrimaryColor = PdfColor.fromInt(0xFF0D47A1);
 const PdfColor kSecondaryColor = PdfColor.fromInt(0xFF1565C0);
 const PdfColor kSuccessColor = PdfColor.fromInt(0xFF00695C);
 const PdfColor kLightGrey = PdfColor.fromInt(0xFFF5F5F5);
 const PdfColor kDarkGrey = PdfColor.fromInt(0xFF424242);
 
-// --- الدالة 1: إنشاء تقرير لمتدرب واحد ---
 Future<pw.Document> createPdfDocument({
   required String traineeName,
-  required List<QueryDocumentSnapshot> results,
-  required List<QueryDocumentSnapshot> notes,
+  required String creatorName,
+  required bool showWatermark,
+  required List<dynamic> results,
+  required List<dynamic> notes,
   String? aiSummary,
   LevelProgress? levelProgress,
   double? averageMastery,
 }) async {
-  return _buildDocument([
-    PdfReportData(
-      traineeName: traineeName,
-      results: results,
-      notes: notes,
-      aiSummary: aiSummary,
-      levelProgress: levelProgress,
-      averageMastery: averageMastery,
-    ),
-  ]);
+  return _buildDocument(
+    [
+      PdfReportData(
+        traineeName: traineeName,
+        results: results,
+        notes: notes,
+        aiSummary: aiSummary,
+        levelProgress: levelProgress,
+        averageMastery: averageMastery,
+      ),
+    ],
+    creatorName: creatorName,
+    showWatermark: showWatermark,
+  );
 }
 
-// --- الدالة 2: إنشاء تقرير شامل لكل المتدربين ---
 Future<pw.Document> createAllTraineesPdfDocument(
-  List<PdfReportData> allTraineesData,
-) async {
-  return _buildDocument(allTraineesData);
+  List<PdfReportData> allTraineesData, {
+  required String creatorName,
+  required bool showWatermark,
+}) async {
+  return _buildDocument(
+    allTraineesData,
+    creatorName: creatorName,
+    showWatermark: showWatermark,
+  );
 }
 
-// --- دالة البناء الداخلية المشتركة ---
-Future<pw.Document> _buildDocument(List<PdfReportData> dataList) async {
+Future<pw.Document> _buildDocument(
+  List<PdfReportData> dataList, {
+  required String creatorName,
+  required bool showWatermark,
+}) async {
   final doc = pw.Document();
   final fontAndLogo = await _loadAssets();
   final now = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
@@ -50,32 +62,55 @@ Future<pw.Document> _buildDocument(List<PdfReportData> dataList) async {
   for (var data in dataList) {
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        textDirection: pw.TextDirection.rtl,
-        theme: pw.ThemeData.withFont(
-          base: fontAndLogo.font,
-          bold: fontAndLogo.font,
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          textDirection: pw.TextDirection.rtl,
+          margin: const pw.EdgeInsets.all(20),
+          theme: pw.ThemeData.withFont(
+            base: fontAndLogo.font,
+            bold: fontAndLogo.font,
+          ),
+          buildBackground: (context) {
+            if (showWatermark) {
+              return pw.FullPage(
+                ignoreMargins: true,
+                child: pw.Center(
+                  child: pw.Transform.rotate(
+                    angle: -math.pi / 4,
+                    child: pw.Opacity(
+                      opacity: 0.05,
+                      child: pw.Text(
+                        'أكاديمية الدرون\nDrone Academy',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 60,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey,
+                          font: fontAndLogo.font,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+            return pw.Container();
+          },
         ),
-        margin: const pw.EdgeInsets.all(20),
         header: (context) => _buildHeader(fontAndLogo.logo, now),
-        footer: (context) => _buildFooter(context),
+        footer: (context) => _buildFooter(context, creatorName),
         build: (pw.Context context) => [
           pw.SizedBox(height: 20),
           _buildTitleBanner(data.traineeName),
           pw.SizedBox(height: 20),
-
           _buildMainStatsRow(data.averageMastery, data.levelProgress),
           pw.SizedBox(height: 15),
-
           if (data.levelProgress != null)
             _buildLevelDetailsSection(data.levelProgress!),
           pw.SizedBox(height: 20),
-
           if (data.aiSummary != null) _buildAiSection(data.aiSummary!),
-
           _buildResultsTable(data.results),
           pw.SizedBox(height: 20),
-
           if (data.notes.isNotEmpty) _buildNotesSection(data.notes),
         ],
       ),
@@ -98,8 +133,7 @@ Future<_Assets> _loadAssets() async {
   return _Assets(ttf, logoImage);
 }
 
-// ========================== المكونات البصرية ============================
-
+// --- Widgets ---
 pw.Widget _buildHeader(pw.MemoryImage logo, String date) {
   return pw.Row(
     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -269,7 +303,8 @@ pw.Widget _buildMiniStatBox(String label, String value) {
   );
 }
 
-pw.Widget _buildResultsTable(List<QueryDocumentSnapshot> results) {
+// --- إصلاح خطأ Timestamp هنا ---
+pw.Widget _buildResultsTable(List<dynamic> results) {
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
@@ -285,7 +320,12 @@ pw.Widget _buildResultsTable(List<QueryDocumentSnapshot> results) {
       pw.Table.fromTextArray(
         headers: ['عنوان التدريب', 'نسبة الإتقان', 'التاريخ'],
         data: results.map((doc) {
-          final date = (doc['date'] as Timestamp).toDate();
+          DateTime date;
+          if (doc['date'] is String) {
+            date = DateTime.parse(doc['date']);
+          } else {
+            date = DateTime.now();
+          }
           return [
             doc['trainingTitle'] ?? '',
             '${doc['masteryPercentage']}%',
@@ -307,8 +347,8 @@ pw.Widget _buildResultsTable(List<QueryDocumentSnapshot> results) {
   );
 }
 
-// --- تم الإصلاح: إزالة borderRadius لمنع توقف التطبيق ---
-pw.Widget _buildNotesSection(List<QueryDocumentSnapshot> notes) {
+// --- إصلاح خطأ Timestamp هنا ---
+pw.Widget _buildNotesSection(List<dynamic> notes) {
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
@@ -322,14 +362,18 @@ pw.Widget _buildNotesSection(List<QueryDocumentSnapshot> notes) {
       ),
       pw.SizedBox(height: 10),
       ...notes.map((note) {
-        final date = (note['date'] as Timestamp).toDate();
+        DateTime date;
+        if (note['date'] is String) {
+          date = DateTime.parse(note['date']);
+        } else {
+          date = DateTime.now();
+        }
         return pw.Container(
           width: double.infinity,
           margin: const pw.EdgeInsets.only(bottom: 8),
           padding: const pw.EdgeInsets.all(10),
           decoration: const pw.BoxDecoration(
             color: kLightGrey,
-            // هام: إزالة borderRadius ليتوافق مع Border(left)
             border: pw.Border(
               left: pw.BorderSide(color: kSecondaryColor, width: 3),
             ),
@@ -352,7 +396,7 @@ pw.Widget _buildNotesSection(List<QueryDocumentSnapshot> notes) {
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                note['note'],
+                note['note'] ?? '',
                 style: const pw.TextStyle(fontSize: 10, color: kDarkGrey),
               ),
             ],
@@ -408,7 +452,7 @@ pw.Widget _buildAiSection(String summary) {
   );
 }
 
-pw.Widget _buildFooter(pw.Context context) {
+pw.Widget _buildFooter(pw.Context context, String creatorName) {
   return pw.Container(
     alignment: pw.Alignment.centerRight,
     margin: const pw.EdgeInsets.only(top: 20),
@@ -419,10 +463,7 @@ pw.Widget _buildFooter(pw.Context context) {
   );
 }
 
-// ========================== أيقونات SVG ==============================
-
 const String _starSvg =
     '<svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>';
-
 const String _trendingUpSvg =
     '<svg viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>';

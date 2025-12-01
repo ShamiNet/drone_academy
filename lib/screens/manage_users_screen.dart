@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/add_user_screen.dart';
-import 'package:drone_academy/screens/user_details_screen.dart';
+// import 'package:drone_academy/screens/user_details_screen.dart'; // قد تحتاج لتعديل هذه الشاشة أيضاً لاحقاً
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة الجديدة
 import 'package:drone_academy/widgets/empty_state_widget.dart';
 import 'package:flutter/material.dart';
 
@@ -14,15 +14,17 @@ class ManageUsersScreen extends StatefulWidget {
 }
 
 class _ManageUsersScreenState extends State<ManageUsersScreen> {
+  // تعريف الخدمة
+  final ApiService _apiService = ApiService();
+
   String _searchQuery = '';
-  String _selectedRoleFilter = 'All'; // All, admin, trainer, trainee
-  int _selectedTab = 0; // 0: All, 1: Blocked, 2: Active
+  String _selectedRoleFilter = 'All';
+  int _selectedTab = 0;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    // الألوان
     const bgColor = Color(0xFF111318);
     const cardColor = Color(0xFF1E2230);
     const orangeColor = Color(0xFFFF9800);
@@ -31,7 +33,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       backgroundColor: bgColor,
       body: Column(
         children: [
-          // --- 1. التبويبات العلوية (Custom Segmented Control) ---
+          // --- 1. التبويبات العلوية ---
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Container(
@@ -43,11 +45,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               ),
               child: Row(
                 children: [
-                  _buildTabItem(l10n.all, 0), // "المستخدمون"
+                  _buildTabItem(l10n.all, 0),
                   _buildVerticalDivider(),
-                  _buildTabItem(l10n.blockUser, 1, isDanger: true), // "محظورون"
+                  _buildTabItem(l10n.blockUser, 1, isDanger: true),
                   _buildVerticalDivider(),
-                  _buildTabItem(l10n.active, 2, isSuccess: true), // "نشطون"
+                  _buildTabItem(l10n.active, 2, isSuccess: true),
                 ],
               ),
             ),
@@ -58,7 +60,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
               children: [
-                // شريط البحث
                 TextField(
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
@@ -77,7 +78,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // قائمة الأدوار المنسدلة (Accordion Style)
                 Container(
                   decoration: BoxDecoration(
                     color: cardColor,
@@ -85,16 +85,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     border: Border.all(
                       color: const Color(0xFF3F51B5),
                       width: 1,
-                    ), // حدود زرقاء خفيفة
+                    ),
                   ),
                   child: Theme(
                     data: Theme.of(
                       context,
                     ).copyWith(dividerColor: Colors.transparent),
                     child: ExpansionTile(
-                      key: Key(
-                        _selectedRoleFilter,
-                      ), // لإجبار التحديث عند تغيير العنوان
+                      key: Key(_selectedRoleFilter),
                       title: Text(
                         _getRoleLabel(_selectedRoleFilter, l10n),
                         style: const TextStyle(color: Colors.white),
@@ -105,10 +103,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         _buildRoleOption('All', l10n.allRoles),
                         _buildRoleOption('admin', l10n.admin),
                         _buildRoleOption('trainer', l10n.trainer),
-                        _buildRoleOption(
-                          'trainee',
-                          l10n.iAmATrainee,
-                        ), // أو Trainees
+                        _buildRoleOption('trainee', l10n.iAmATrainee),
                       ],
                     ),
                   ),
@@ -119,56 +114,54 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
           const SizedBox(height: 16),
 
-          // --- 3. قائمة المستخدمين ---
+          // --- 3. قائمة المستخدمين (تستخدم ApiService) ---
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .snapshots(),
+            child: StreamBuilder<List<dynamic>>(
+              // تغيير النوع إلى List<dynamic>
+              stream: _apiService.streamUsers(), // استخدام دالة الـ Proxy
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+
+                // التعامل مع البيانات القادمة من JSON
+                final usersList = snapshot.data ?? [];
+
+                if (usersList.isEmpty) {
                   return EmptyStateWidget(
                     message: l10n.noUsersFound,
                     imagePath: 'assets/illustrations/no_data.svg',
                   );
                 }
 
-                // منطق الفلترة
-                var users = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final name = (data['displayName'] ?? '')
+                // منطق الفلترة (يتم محلياً)
+                var filteredUsers = usersList.where((user) {
+                  // user هو عبارة عن Map<String, dynamic>
+                  final name = (user['displayName'] ?? '')
                       .toString()
                       .toLowerCase();
-                  final email = (data['email'] ?? '').toString().toLowerCase();
-                  final role = data['role'] ?? 'trainee';
-                  final isBlocked = data['isBlocked'] ?? false;
+                  final email = (user['email'] ?? '').toString().toLowerCase();
+                  final role = user['role'] ?? 'trainee';
+                  final isBlocked = user['isBlocked'] ?? false;
 
-                  // فلتر البحث النصي
                   if (_searchQuery.isNotEmpty &&
                       !name.contains(_searchQuery.toLowerCase()) &&
                       !email.contains(_searchQuery.toLowerCase())) {
                     return false;
                   }
 
-                  // فلتر الدور
                   if (_selectedRoleFilter != 'All' &&
                       role != _selectedRoleFilter) {
                     return false;
                   }
 
-                  // فلتر التبويبات (الكل، محظور، نشط)
-                  if (_selectedTab == 1 && !isBlocked)
-                    return false; // تبويب المحظورين
-                  if (_selectedTab == 2 && isBlocked)
-                    return false; // تبويب النشطين
+                  if (_selectedTab == 1 && !isBlocked) return false;
+                  if (_selectedTab == 2 && isBlocked) return false;
 
                   return true;
                 }).toList();
 
-                if (users.isEmpty) {
+                if (filteredUsers.isEmpty) {
                   return Center(
                     child: Text(
                       l10n.noResultsFound,
@@ -179,11 +172,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: users.length,
+                  itemCount: filteredUsers.length,
                   itemBuilder: (context, index) {
-                    final userDoc = users[index];
-                    final data = userDoc.data() as Map<String, dynamic>;
-                    final isBlocked = data['isBlocked'] ?? false;
+                    final user = filteredUsers[index]; // Map<String, dynamic>
+                    final isBlocked = user['isBlocked'] ?? false;
+                    final userId =
+                        user['id'] ?? user['uid']; // التأكد من وجود المعرف
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -196,15 +190,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        // الصورة (اليسار في RTL)
-                        leading: _buildBlockSwitch(
-                          userDoc.reference,
-                          isBlocked,
-                        ),
+                        // زر التبديل للحظر (يستخدم ApiService)
+                        leading: _buildBlockSwitch(userId, isBlocked),
 
-                        // المعلومات (الوسط/اليمين)
                         title: Text(
-                          data['displayName'] ?? 'No Name',
+                          user['displayName'] ?? 'No Name',
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -214,7 +204,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              data['email'] ?? '',
+                              user['email'] ?? '',
                               style: const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 12,
@@ -240,8 +230,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                               child: Text(
                                 isBlocked
                                     ? 'محظور'
-                                    : (data['role'] ??
-                                          'trainee'), // ترجمة الدور
+                                    : (user['role'] ?? 'trainee'),
                                 style: TextStyle(
                                   color: isBlocked
                                       ? Colors.red
@@ -253,28 +242,24 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           ],
                         ),
 
-                        // زر التعديل أو الصورة (الجهة الأخرى)
+                        // زر التفاصيل
                         trailing: GestureDetector(
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    UserDetailsScreen(userDoc: userDoc),
-                              ),
-                            );
+                            // ملاحظة: UserDetailsScreen تحتاج أيضاً لتعديل لتقبل Map بدلاً من DocumentSnapshot
+                            // أو يمكنك تمرير البيانات بشكل مختلف. للآن سأعطلها مؤقتاً لتجنب الأخطاء
+                            // Navigator.push(context, MaterialPageRoute(builder: (_) => UserDetailsScreen(userData: user)));
                           },
                           child: CircleAvatar(
                             radius: 24,
                             backgroundColor: Colors.blue,
                             backgroundImage:
-                                (data['photoUrl'] != null &&
-                                    data['photoUrl'] != '')
-                                ? CachedNetworkImageProvider(data['photoUrl'])
+                                (user['photoUrl'] != null &&
+                                    user['photoUrl'] != '')
+                                ? CachedNetworkImageProvider(user['photoUrl'])
                                 : null,
                             child:
-                                (data['photoUrl'] == null ||
-                                    data['photoUrl'] == '')
+                                (user['photoUrl'] == null ||
+                                    user['photoUrl'] == '')
                                 ? const Icon(Icons.person, color: Colors.white)
                                 : null,
                           ),
@@ -288,7 +273,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           ),
         ],
       ),
-      // الزر العائم للإضافة
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
           context,
@@ -297,12 +281,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         backgroundColor: orangeColor,
         child: const Icon(Icons.add, color: Colors.black),
       ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.startFloat, // أقصى اليسار
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 
-  // --- دوال مساعدة للواجهة ---
+  // --- دوال مساعدة ---
 
   Widget _buildTabItem(
     String label,
@@ -313,7 +296,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     final bool isSelected = _selectedTab == index;
     Color textColor = Colors.grey;
     if (isSelected) {
-      textColor = Colors.white; // النص أبيض عند التحديد
+      textColor = Colors.white;
     }
 
     return Expanded(
@@ -382,21 +365,35 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       case 'trainer':
         return l10n.trainer;
       case 'trainee':
-        return l10n.trainees; // أو ترجمة "متدربين"
+        return l10n.trainees;
       default:
-        return 'جميع الأدوار'; // أو l10n.allRoles
+        return 'جميع الأدوار';
     }
   }
 
-  Widget _buildBlockSwitch(DocumentReference ref, bool isBlocked) {
+  // ويدجت التبديل (Switch) الذي يتصل بالسيرفر
+  Widget _buildBlockSwitch(String userId, bool isBlocked) {
     return Transform.scale(
       scale: 0.8,
       child: Switch(
-        value: !isBlocked, // السويتش مفعل يعني الحساب "نشط" (غير محظور)
-        onChanged: (val) {
-          // val = true (نشط) -> isBlocked = false
-          // val = false (غير نشط) -> isBlocked = true
-          ref.update({'isBlocked': !val});
+        value: !isBlocked, // تفعيل = حساب نشط
+        onChanged: (val) async {
+          // استدعاء API لتحديث الحالة
+          final success = await _apiService.updateUser({
+            'uid': userId,
+            'isBlocked': !val, // عكس القيمة لأن val هي "النشاط"
+          });
+
+          if (!success) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("فشل تحديث الحالة. تأكد من الاتصال بالسيرفر."),
+                ),
+              );
+            }
+          }
+          // الستريم سيقوم بتحديث الواجهة تلقائياً بعد نجاح العملية في السيرفر
         },
         activeColor: Colors.white,
         activeTrackColor: Colors.grey.shade600,

@@ -1,11 +1,10 @@
-// lib/screens/edit_inventory_item_screen.dart
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
 class EditInventoryItemScreen extends StatefulWidget {
-  final DocumentSnapshot? item;
+  // تم التغيير إلى Map لدعم البيانات القادمة من API
+  final Map<String, dynamic>? item;
   const EditInventoryItemScreen({super.key, this.item});
 
   @override
@@ -14,6 +13,7 @@ class EditInventoryItemScreen extends StatefulWidget {
 }
 
 class _EditInventoryItemScreenState extends State<EditInventoryItemScreen> {
+  final ApiService _apiService = ApiService();
   late AppLocalizations l10n;
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -25,9 +25,8 @@ class _EditInventoryItemScreenState extends State<EditInventoryItemScreen> {
   void initState() {
     super.initState();
     if (_isEditing) {
-      final data = widget.item!.data() as Map<String, dynamic>;
-      _nameController.text = data['name'];
-      _totalQuantityController.text = data['totalQuantity'].toString();
+      _nameController.text = widget.item!['name'];
+      _totalQuantityController.text = widget.item!['totalQuantity'].toString();
     }
   }
 
@@ -54,37 +53,30 @@ class _EditInventoryItemScreenState extends State<EditInventoryItemScreen> {
     try {
       if (_isEditing) {
         // عند التعديل، نحتاج لتحديث الكمية المتاحة أيضاً
-        final data = widget.item!.data() as Map<String, dynamic>;
-        final oldTotal = data['totalQuantity'] as int;
-        final oldAvailable = data['availableQuantity'] as int;
+        final oldTotal = widget.item!['totalQuantity'] as int;
+        final oldAvailable = widget.item!['availableQuantity'] as int;
 
         // حساب الفارق وإضافته للكمية المتاحة
         final diff = totalQuantity - oldTotal;
         final newAvailable = oldAvailable + diff;
 
-        await FirebaseFirestore.instance
-            .collection('inventory')
-            .doc(widget.item!.id)
-            .update({
-              'name': _nameController.text,
-              'totalQuantity': totalQuantity,
-              'availableQuantity': newAvailable < 0
-                  ? 0
-                  : newAvailable, // التأكد أن المتاح لا يقل عن صفر
-            });
-      } else {
-        // عند الإضافة، الكمية المتاحة تساوي الكمية الإجمالية
-        await FirebaseFirestore.instance.collection('inventory').add({
+        await _apiService.updateInventoryItem(widget.item!['id'], {
           'name': _nameController.text,
           'totalQuantity': totalQuantity,
-          'availableQuantity': totalQuantity, // الاثنان متساويان عند الإنشاء
-          'createdAt': FieldValue.serverTimestamp(),
+          'availableQuantity': newAvailable < 0 ? 0 : newAvailable,
+        });
+      } else {
+        // عند الإضافة، الكمية المتاحة تساوي الكمية الإجمالية
+        await _apiService.addInventoryItem({
+          'name': _nameController.text,
+          'totalQuantity': totalQuantity,
+          'availableQuantity': totalQuantity,
+          'createdAt': DateTime.now().toIso8601String(),
         });
       }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       print("Error saving inventory item: $e");
-      // يمكنك إضافة SnackBar لإظهار الخطأ
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -92,11 +84,16 @@ class _EditInventoryItemScreenState extends State<EditInventoryItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const bgColor = Color(0xFF111318);
+
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
           _isEditing ? l10n.editInventoryItem : l10n.addInventoryItem,
         ),
+        backgroundColor: bgColor,
+        elevation: 0,
         actions: [
           IconButton(icon: const Icon(Icons.save), onPressed: _saveItem),
         ],
@@ -111,15 +108,27 @@ class _EditInventoryItemScreenState extends State<EditInventoryItemScreen> {
                   children: [
                     TextFormField(
                       controller: _nameController,
-                      decoration: InputDecoration(labelText: l10n.itemName),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: l10n.itemName,
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                      ),
                       validator: (v) =>
                           v!.isEmpty ? 'Please enter a name' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _totalQuantityController,
+                      style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: l10n.totalQuantity,
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
                       ),
                       keyboardType: TextInputType.number,
                       validator: (v) {

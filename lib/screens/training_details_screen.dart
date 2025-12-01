@@ -1,12 +1,12 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TrainingDetailsScreen extends StatefulWidget {
-  final QueryDocumentSnapshot training;
+  final Map<String, dynamic> training;
   final String imageUrl;
 
   const TrainingDetailsScreen({
@@ -20,10 +20,11 @@ class TrainingDetailsScreen extends StatefulWidget {
 }
 
 class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
+  final ApiService _apiService = ApiService();
+
   Future<void> _launchURL(String url) async {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      // Show an error snackbar if the URL can't be launched
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -32,39 +33,21 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
     }
   }
 
-  // --- دالة جديدة: لتحديث حالة إتمام الخطوة ---
-  void _onStepCompleted(bool isCompleted, String stepId) {
+  void _onStepCompleted(bool isCompleted, String stepId) async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
 
-    final progressCollection = FirebaseFirestore.instance.collection(
-      'step_progress',
+    await _apiService.setStepProgress(
+      userId,
+      widget.training['id'],
+      stepId,
+      isCompleted,
     );
-    final query = progressCollection
-        .where('userId', isEqualTo: userId)
-        .where('trainingId', isEqualTo: widget.training.id)
-        .where('stepId', isEqualTo: stepId);
-
-    if (isCompleted) {
-      // إذا تم تحديد المربع، أضف سجل التقدم
-      progressCollection.add({
-        'userId': userId,
-        'trainingId': widget.training.id,
-        'stepId': stepId,
-        'completedAt': Timestamp.now(),
-      });
-    } else {
-      // إذا تم إلغاء التحديد، احذف سجل التقدم
-      query.get().then((snapshot) {
-        for (var doc in snapshot.docs) {
-          doc.reference.delete();
-        }
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final String title = widget.training['title'] ?? 'No Title';
     final String description =
         widget.training['description'] ?? 'No Description';
@@ -75,10 +58,8 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
       body: ListView(
         children: [
           Hero(
-            tag: 'training_image_${widget.training.id}',
-            // --- This is the corrected section ---
+            tag: 'training_image_${widget.training['id']}',
             child: (widget.imageUrl.isNotEmpty)
-                // If we have a URL, use Image.network
                 ? CachedNetworkImage(
                     imageUrl: widget.imageUrl,
                     height: 250,
@@ -87,14 +68,12 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
                     errorWidget: (context, url, error) =>
                         Image.asset('assets/images/drone_training_1.jpg'),
                   )
-                // Otherwise, fall back to the local placeholder asset
                 : Image.asset(
                     'assets/images/drone_training_1.jpg',
                     height: 250,
                     width: double.infinity,
                     fit: BoxFit.cover,
                   ),
-            // --- End of correction ---
           ),
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -104,48 +83,40 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
             ),
           ),
           const Divider(height: 24),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Text(
-              "Training Steps", // Needs translation key: 'trainingSteps'
+              l10n.trainingSteps,
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
-          // --- بداية التعديل الكبير: استخدام StreamBuilder متداخل ---
-          // StreamBuilder الأول: لجلب كل خطوات التدريب
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('trainings')
-                .doc(widget.training.id)
-                .collection('steps')
-                .orderBy('order')
-                .snapshots(),
+          // جلب الخطوات من السيرفر
+          FutureBuilder<List<dynamic>>(
+            future: _apiService.fetchSteps(widget.training['id']),
             builder: (context, stepsSnapshot) {
-              final l10n = AppLocalizations.of(context)!;
-              if (!stepsSnapshot.hasData)
+              if (stepsSnapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
-              if (stepsSnapshot.data!.docs.isEmpty) {
+              }
+              final steps = stepsSnapshot.data ?? [];
+              if (steps.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Text(l10n.noStepsAdded),
                 );
               }
 
-              // StreamBuilder الثاني: ليستمع لتقدم المتدرب في هذه الخطوات
-              return StreamBuilder<QuerySnapshot>(
+              // الاستماع للتقدم من السيرفر
+              return StreamBuilder<List<dynamic>>(
                 stream: (userId != null)
-                    ? FirebaseFirestore.instance
-                          .collection('step_progress')
-                          .where('userId', isEqualTo: userId)
-                          .where('trainingId', isEqualTo: widget.training.id)
-                          .snapshots()
+                    ? _apiService.streamStepProgress(
+                        userId,
+                        widget.training['id'],
+                      )
                     : const Stream.empty(),
                 builder: (context, progressSnapshot) {
-                  // إنشاء مجموعة "Set" بالخطوات المكتملة لسهولة البحث
                   final completedStepIds = <String>{};
                   if (progressSnapshot.hasData) {
-                    for (var doc in progressSnapshot.data!.docs) {
+                    for (var doc in progressSnapshot.data!) {
                       completedStepIds.add(doc['stepId']);
                     }
                   }
@@ -153,11 +124,12 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
                   return ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: stepsSnapshot.data!.docs.length,
+                    itemCount: steps.length,
                     itemBuilder: (context, index) {
-                      final step = stepsSnapshot.data!.docs[index];
+                      final step = steps[index];
                       final stepType = step['type'];
                       final stepTitle = step['title'];
+                      final stepId = step['id']; // تأكد أن السيرفر يرسل id
 
                       if (stepType == 'video') {
                         return Card(
@@ -172,15 +144,14 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
                         );
                       }
 
-                      final isCompleted = completedStepIds.contains(step.id);
-
+                      final isCompleted = completedStepIds.contains(stepId);
                       return Card(
                         child: CheckboxListTile(
                           title: Text(stepTitle),
                           value: isCompleted,
                           onChanged: (bool? value) {
                             if (value != null) {
-                              _onStepCompleted(value, step.id);
+                              _onStepCompleted(value, stepId);
                             }
                           },
                         ),

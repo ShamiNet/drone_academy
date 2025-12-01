@@ -1,5 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // نحتاجها فقط لنوع Timestamp إذا كان مستخدماً في مكان ما، لكن سنحاول تجنبه
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -14,10 +15,13 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
+  final ApiService _apiService = ApiService();
   late AppLocalizations l10n;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  Map<DateTime, List<DocumentSnapshot>> _events = {};
+
+  // تخزين الأحداث: المفتاح هو التاريخ (بدون وقت)، القيمة هي قائمة الأحداث
+  Map<DateTime, List<dynamic>> _events = {};
 
   @override
   void initState() {
@@ -31,28 +35,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     l10n = AppLocalizations.of(context)!;
   }
 
-  Stream<Map<DateTime, List<DocumentSnapshot>>> _loadEvents() {
-    return FirebaseFirestore.instance
-        .collection('schedule')
-        .where('traineeId', isEqualTo: widget.traineeId)
-        .snapshots()
-        .map((snapshot) {
-          final eventsMap = <DateTime, List<DocumentSnapshot>>{};
-          for (var doc in snapshot.docs) {
-            final eventDate = (doc['startTime'] as Timestamp).toDate();
-            final dayOnly = DateTime.utc(
-              eventDate.year,
-              eventDate.month,
-              eventDate.day,
-            );
+  // دالة مساعدة لتحويل قائمة الأحداث القادمة من API إلى Map للتقويم
+  Map<DateTime, List<dynamic>> _groupEventsByDate(List<dynamic> events) {
+    final Map<DateTime, List<dynamic>> data = {};
+    for (var event in events) {
+      final startTimeString = event['startTime'];
+      if (startTimeString == null) continue;
 
-            if (eventsMap[dayOnly] == null) {
-              eventsMap[dayOnly] = [];
-            }
-            eventsMap[dayOnly]!.add(doc);
-          }
-          return eventsMap;
-        });
+      final eventDate = DateTime.parse(startTimeString);
+      final dayOnly = DateTime.utc(
+        eventDate.year,
+        eventDate.month,
+        eventDate.day,
+      );
+
+      if (data[dayOnly] == null) {
+        data[dayOnly] = [];
+      }
+      data[dayOnly]!.add(event);
+    }
+    return data;
   }
 
   Future<void> _showAddEventDialog() async {
@@ -67,7 +69,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(l10n.addSession),
+              backgroundColor: const Color(0xFF1E2230),
+              title: Text(
+                l10n.addSession,
+                style: const TextStyle(color: Colors.white),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -75,15 +81,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   children: [
                     TextField(
                       controller: titleController,
-                      decoration: InputDecoration(labelText: l10n.sessionTitle),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: l10n.sessionTitle,
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 20),
                     ListTile(
-                      leading: const Icon(Icons.calendar_today),
+                      leading: const Icon(
+                        Icons.calendar_today,
+                        color: Colors.grey,
+                      ),
                       title: Text(
                         selectedDate != null
                             ? DateFormat.yMMMd().format(selectedDate!)
                             : l10n.date,
+                        style: const TextStyle(color: Colors.white),
                       ),
                       onTap: () async {
                         final pickedDate = await showDatePicker(
@@ -97,11 +114,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const Icon(Icons.access_time),
+                      leading: const Icon(
+                        Icons.access_time,
+                        color: Colors.grey,
+                      ),
                       title: Text(
                         startTime != null
                             ? startTime!.format(context)
                             : l10n.startTime,
+                        style: const TextStyle(color: Colors.white),
                       ),
                       onTap: () async {
                         final pickedTime = await showTimePicker(
@@ -113,11 +134,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const Icon(Icons.timelapse),
+                      leading: const Icon(Icons.timelapse, color: Colors.grey),
                       title: Text(
                         endTime != null
                             ? endTime!.format(context)
                             : l10n.endTime,
+                        style: const TextStyle(color: Colors.white),
                       ),
                       onTap: () async {
                         final pickedTime = await showTimePicker(
@@ -134,7 +156,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(l10n.cancel),
+                  child: Text(
+                    l10n.cancel,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed:
@@ -149,6 +174,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           endTime!,
                         )
                       : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8FA1B4),
+                    foregroundColor: Colors.black,
+                  ),
                   child: Text(l10n.save),
                 ),
               ],
@@ -168,20 +197,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final trainerAuth = FirebaseAuth.instance.currentUser;
     if (trainerAuth == null) return;
 
-    final trainerDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(trainerAuth.uid)
-        .get();
-    final trainerName = trainerDoc.data()?['displayName'] ?? 'Unknown';
+    // بما أننا لا نستطيع استخدام Firestore لجلب اسم المدرب مباشرة، نرسل المعرف
+    // أو نجلبه عبر API (للتبسيط سنرسل المعرف واسم افتراضي أو نجلبه من المستخدم الحالي)
+    final trainerName = trainerAuth.displayName ?? 'Unknown';
 
-    final startTime = DateTime(
+    final startDateTime = DateTime(
       date.year,
       date.month,
       date.day,
       start.hour,
       start.minute,
     );
-    final endTime = DateTime(
+    final endDateTime = DateTime(
       date.year,
       date.month,
       date.day,
@@ -189,29 +216,39 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       end.minute,
     );
 
-    FirebaseFirestore.instance.collection('schedule').add({
+    await _apiService.addScheduleEvent({
       'title': title,
-      'startTime': Timestamp.fromDate(startTime),
-      'endTime': Timestamp.fromDate(endTime),
+      'startTime': startDateTime,
+      'endTime': endDateTime,
       'traineeId': widget.traineeId,
       'trainerId': trainerAuth.uid,
       'trainerName': trainerName,
     });
 
     if (mounted) Navigator.of(context).pop();
-    // --- هذا هو السطر الذي تم إضافته ---
-    setState(() {}); // لإجبار الواجهة على إعادة البناء
   }
 
   @override
   Widget build(BuildContext context) {
+    const bgColor = Color(0xFF111318);
+
     return Scaffold(
-      body: FutureBuilder<List<DocumentSnapshot>>(
-        // تغيير إلى FutureBuilder
-        future:
-            _loadEventsForSelectedDay(), // دالة جديدة لجلب بيانات اليوم المحدد
+      backgroundColor: bgColor,
+      body: StreamBuilder<List<dynamic>>(
+        stream: _apiService.streamSchedule(traineeId: widget.traineeId),
         builder: (context, snapshot) {
-          final selectedEvents = snapshot.data ?? [];
+          final allEventsList = snapshot.data ?? [];
+          // تحديث خريطة الأحداث
+          _events = _groupEventsByDate(allEventsList);
+
+          // الحصول على أحداث اليوم المحدد
+          final selectedEvents =
+              _events[DateTime.utc(
+                _selectedDay!.year,
+                _selectedDay!.month,
+                _selectedDay!.day,
+              )] ??
+              [];
 
           return Column(
             children: [
@@ -228,6 +265,41 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 },
                 eventLoader: (day) =>
                     _events[DateTime.utc(day.year, day.month, day.day)] ?? [],
+
+                // تنسيق التقويم للوضع الداكن
+                calendarStyle: const CalendarStyle(
+                  defaultTextStyle: TextStyle(color: Colors.white),
+                  weekendTextStyle: TextStyle(color: Colors.white70),
+                  outsideTextStyle: TextStyle(color: Colors.grey),
+                  selectedDecoration: BoxDecoration(
+                    color: Color(0xFF8FA1B4),
+                    shape: BoxShape.circle,
+                  ),
+                  todayDecoration: BoxDecoration(
+                    color: Color(0xFF3F51B5),
+                    shape: BoxShape.circle,
+                  ),
+                  markerDecoration: BoxDecoration(
+                    color: Color(0xFFFF9800),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                headerStyle: const HeaderStyle(
+                  titleTextStyle: TextStyle(color: Colors.white, fontSize: 16),
+                  formatButtonVisible: false,
+                  leftChevronIcon: Icon(
+                    Icons.chevron_left,
+                    color: Colors.white,
+                  ),
+                  rightChevronIcon: Icon(
+                    Icons.chevron_right,
+                    color: Colors.white,
+                  ),
+                ),
+                daysOfWeekStyle: const DaysOfWeekStyle(
+                  weekdayStyle: TextStyle(color: Colors.grey),
+                  weekendStyle: TextStyle(color: Colors.grey),
+                ),
               ),
               const SizedBox(height: 8.0),
               Expanded(
@@ -235,19 +307,33 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   itemCount: selectedEvents.length,
                   itemBuilder: (context, index) {
                     final event = selectedEvents[index];
-                    final startTime = (event['startTime'] as Timestamp)
-                        .toDate();
+                    final startTime = DateTime.parse(event['startTime']);
+
                     return Card(
+                      color: const Color(0xFF1E2230),
                       margin: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 4,
                       ),
                       child: ListTile(
-                        title: Text(event['title']),
-                        subtitle: Text(
-                          '${l10n.trainer}: ${event['trainerName']}',
+                        title: Text(
+                          event['title'] ?? '',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        trailing: Text(DateFormat.jm().format(startTime)),
+                        subtitle: Text(
+                          '${l10n.trainer}: ${event['trainerName'] ?? "Unknown"}',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        trailing: Text(
+                          DateFormat.jm().format(startTime),
+                          style: const TextStyle(
+                            color: Color(0xFF8FA1B4),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     );
                   },
@@ -259,62 +345,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddEventDialog,
-        tooltip: l10n.addSession,
-        child: const Icon(Icons.add),
+        backgroundColor: const Color(0xFFFF9800),
+        child: const Icon(Icons.add, color: Colors.black),
       ),
     );
-  }
-
-  // --- دالة جديدة لجلب بيانات اليوم المحدد فقط ---
-  Future<List<DocumentSnapshot>> _loadEventsForSelectedDay() async {
-    if (_selectedDay == null) return [];
-
-    final startOfDay = DateTime.utc(
-      _selectedDay!.year,
-      _selectedDay!.month,
-      _selectedDay!.day,
-    );
-    final endOfDay = startOfDay.add(const Duration(days: 1));
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection('schedule')
-        .where('traineeId', isEqualTo: widget.traineeId)
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-        )
-        .where('startTime', isLessThan: Timestamp.fromDate(endOfDay))
-        .get();
-
-    // تحديث علامات التقويم
-    _loadAllEventsForMarkers();
-    return snapshot.docs;
-  }
-
-  // --- دالة مساعدة لتحديث علامات النقاط في التقويم ---
-  void _loadAllEventsForMarkers() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('schedule')
-        .where('traineeId', isEqualTo: widget.traineeId)
-        .get();
-
-    final eventsMap = <DateTime, List<DocumentSnapshot>>{};
-    for (var doc in snapshot.docs) {
-      final eventDate = (doc['startTime'] as Timestamp).toDate();
-      final dayOnly = DateTime.utc(
-        eventDate.year,
-        eventDate.month,
-        eventDate.day,
-      );
-      if (eventsMap[dayOnly] == null) {
-        eventsMap[dayOnly] = [];
-      }
-      eventsMap[dayOnly]!.add(doc);
-    }
-    if (mounted) {
-      setState(() {
-        _events = eventsMap;
-      });
-    }
   }
 }

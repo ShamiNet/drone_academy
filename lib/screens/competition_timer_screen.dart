@@ -1,16 +1,16 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class CompetitionTimerScreen extends StatefulWidget {
-  final DocumentSnapshot competition;
-  final DocumentSnapshot traineeDoc; // 1. متغير جديد لاستقبال بيانات المتدرب
+  final Map<String, dynamic> competition; // Map
+  final Map<String, dynamic> traineeDoc; // Map
 
   const CompetitionTimerScreen({
     super.key,
     required this.competition,
-    required this.traineeDoc, // مطلوب الآن
+    required this.traineeDoc,
   });
 
   @override
@@ -18,6 +18,7 @@ class CompetitionTimerScreen extends StatefulWidget {
 }
 
 class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
+  final ApiService _apiService = ApiService();
   final Stopwatch _stopwatch = Stopwatch();
   late Timer _timer;
   String _result = '00:00:000';
@@ -26,11 +27,9 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
   @override
   void initState() {
     super.initState();
-    // المؤقت الذي سيقوم بتحديث الواجهة بشكل دوري
     _timer = Timer.periodic(const Duration(milliseconds: 30), (Timer timer) {
       if (_stopwatch.isRunning) {
         setState(() {
-          // تنسيق الوقت لعرضه على الشاشة
           _result =
               '${_stopwatch.elapsed.inMinutes.toString().padLeft(2, '0')}:${(_stopwatch.elapsed.inSeconds % 60).toString().padLeft(2, '0')}:${(_stopwatch.elapsed.inMilliseconds % 1000).toString().padLeft(3, '0')}';
         });
@@ -40,7 +39,7 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
 
   @override
   void dispose() {
-    _timer.cancel(); // إيقاف المؤقت عند إغلاق الشاشة
+    _timer.cancel();
     super.dispose();
   }
 
@@ -59,28 +58,25 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
   }
 
   Future<void> _saveResult() async {
-    // استخدام بيانات المتدرب التي تم تمريرها بدلاً من المستخدم الحالي
-    final traineeId = widget.traineeDoc.id;
-    final traineeName = widget.traineeDoc['displayName'] ?? 'Unknown Trainee';
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    final traineeId = widget.traineeDoc['id'] ?? widget.traineeDoc['uid'];
+    final traineeName = widget.traineeDoc['displayName'] ?? 'Unknown';
 
-    await FirebaseFirestore.instance.collection('competition_entries').add({
-      'competitionId': widget.competition.id,
+    await _apiService.addCompetitionEntry({
+      'competitionId': widget.competition['id'],
       'competitionTitle': widget.competition['title'],
       'traineeUid': traineeId,
       'traineeName': traineeName,
       'score': _stopwatch.elapsed.inMilliseconds,
-      'date': Timestamp.now(),
+      'date': DateTime.now().toIso8601String(),
     });
-    // ignore: use_build_context_synchronously
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Result for $traineeName has been saved!')),
-    );
 
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Result for $traineeName has been saved!')),
+      );
+      Navigator.of(context).pop();
+    }
     _stopwatch.reset();
-    // ignore: use_build_context_synchronously
-    Navigator.of(context).pop(); // العودة للشاشة السابقة بعد الحفظ
   }
 
   @override
@@ -88,7 +84,7 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.competition['title']),
-        automaticallyImplyLeading: !_isRunning, // منع الرجوع أثناء تشغيل المؤقت
+        automaticallyImplyLeading: !_isRunning,
       ),
       body: Center(
         child: Column(
@@ -99,7 +95,6 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
               style: const TextStyle(fontSize: 60.0, fontFamily: 'monospace'),
             ),
             const SizedBox(height: 40),
-            // إظهار زر البدء أو الإيقاف بناءً على حالة المؤقت
             if (!_isRunning &&
                 !_stopwatch.isRunning &&
                 _stopwatch.elapsedMilliseconds == 0)
@@ -132,7 +127,6 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
                   style: TextStyle(fontSize: 24, color: Colors.white),
                 ),
               ),
-            // إظهار زر الحفظ بعد إيقاف المؤقت
             if (!_isRunning && _stopwatch.elapsedMilliseconds > 0)
               ElevatedButton(
                 onPressed: _saveResult,

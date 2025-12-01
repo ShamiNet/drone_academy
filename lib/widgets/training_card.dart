@@ -1,31 +1,24 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:drone_academy/l10n/app_localizations.dart';
-import 'package:drone_academy/screens/training_details_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:drone_academy/screens/training_details_screen.dart';
 import 'package:flutter/material.dart';
 
 class TrainingCard extends StatelessWidget {
-  const TrainingCard({super.key, required this.training});
+  // تم التغيير لقبول Map<String, dynamic>
+  final Map<String, dynamic> training;
 
-  final QueryDocumentSnapshot training;
+  const TrainingCard({super.key, required this.training});
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final title = training['title'] ?? 'No Title';
+    final imageUrl = training['imageUrl'];
 
-    final data = training.data() as Map<String, dynamic>;
-    final imageUrl = data.containsKey('imageUrl')
-        ? data['imageUrl'] as String?
-        : null;
-
-    // --- بداية التعديل: استخدام ListTile لحل مشكلة RenderFlex ---
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: ListTile(
         leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8.0), // لجعل الصورة بزوايا دائرية
-          child: (imageUrl != null && imageUrl.isNotEmpty)
+          borderRadius: BorderRadius.circular(8.0),
+          child: (imageUrl != null && imageUrl.toString().isNotEmpty)
               ? CachedNetworkImage(
                   imageUrl: imageUrl,
                   width: 50,
@@ -61,6 +54,5 @@ class TrainingCard extends StatelessWidget {
         },
       ),
     );
-    // --- نهاية التعديل ---
   }
 }

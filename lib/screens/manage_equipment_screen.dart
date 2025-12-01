@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/edit_equipment_screen.dart';
 import 'package:drone_academy/screens/equipment_history_screen.dart';
+import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
 import 'package:drone_academy/widgets/empty_state_widget.dart';
 import 'package:flutter/material.dart';
 
@@ -14,6 +14,7 @@ class ManageEquipmentScreen extends StatefulWidget {
 }
 
 class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
+  final ApiService _apiService = ApiService(); // استخدام الخدمة
   late AppLocalizations l10n;
 
   @override
@@ -22,21 +23,19 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
     l10n = AppLocalizations.of(context)!;
   }
 
-  // --- ألوان الحالة (مطابقة للصورة) ---
   Color _getStatusColor(String status) {
     switch (status) {
       case 'available':
-        return const Color(0xFF4CAF50); // أخضر (متاح)
+        return const Color(0xFF4CAF50);
       case 'inUse':
-        return const Color(0xFFFF9800); // برتقالي (قيد الاستخدام)
+        return const Color(0xFFFF9800);
       case 'inMaintenance':
-        return const Color(0xFFF44336); // أحمر (في الصيانة)
+        return const Color(0xFFF44336);
       default:
         return Colors.grey;
     }
   }
 
-  // --- ترجمة النصوص ---
   String _translateKey(String key) {
     switch (key) {
       case 'drone':
@@ -58,13 +57,12 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
     }
   }
 
-  // --- أيقونات الأنواع ---
   IconData _getIconForType(String type) {
     switch (type) {
       case 'drone':
         return Icons.flight;
       case 'battery':
-        return Icons.battery_std; // أيقونة بطارية
+        return Icons.battery_std;
       case 'controller':
         return Icons.gamepad;
       default:
@@ -72,101 +70,75 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
     }
   }
 
-  Future<void> _showDeleteConfirmationDialog(DocumentSnapshot item) async {
-    return showDialog<void>(
+  void _showDeleteConfirmationDialog(String id, String name) {
+    showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E2230),
-          title: Text(
-            l10n.confirmDeletion,
-            style: const TextStyle(color: Colors.white),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2230),
+        title: Text(
+          l10n.confirmDeletion,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '${l10n.areYouSureDelete} $name?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.cancel),
           ),
-          content: Text(
-            '${l10n.areYouSureDelete} ${item['name']}?',
-            style: const TextStyle(color: Colors.white70),
+          TextButton(
+            child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
+            onPressed: () {
+              _apiService.deleteEquipment(id); // الحذف عبر السيرفر
+              Navigator.pop(ctx);
+            },
           ),
-          actions: <Widget>[
-            TextButton(
-              child: Text(
-                l10n.cancel,
-                style: const TextStyle(color: Colors.grey),
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            TextButton(
-              child: Text(
-                l10n.delete,
-                style: const TextStyle(color: Colors.red),
-              ),
-              onPressed: () {
-                FirebaseFirestore.instance
-                    .collection('equipment')
-                    .doc(item.id)
-                    .delete();
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // الألوان المستوحاة من التصميم الداكن
     const bgColor = Color(0xFF111318);
-    const cardColor = Color(0xFF1E2230); // لون خلفية القوائم
+    const cardColor = Color(0xFF1E2230);
 
     return Scaffold(
       backgroundColor: bgColor,
-
-      // زر الإضافة العائم (برتقالي)
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const EditEquipmentScreen(),
-            ),
-          );
-        },
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const EditEquipmentScreen()),
+        ),
         backgroundColor: const Color(0xFFFF9800),
         child: const Icon(Icons.add, color: Colors.black),
       ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.startFloat, // يسار الشاشة (للعربية)
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('equipment')
-            .orderBy('type')
-            .snapshots(),
+      // استخدام streamEquipment من ApiService
+      body: StreamBuilder<List<dynamic>>(
+        stream: _apiService.streamEquipment(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+
+          final equipmentList = snapshot.data ?? [];
+          if (equipmentList.isEmpty) {
             return EmptyStateWidget(
               message: l10n.noEquipmentAddedYet,
               imagePath: 'assets/illustrations/no_data.svg',
             );
           }
 
-          final equipmentList = snapshot.data!.docs;
-
-          // تجميع المعدات حسب النوع
-          final Map<String, List<DocumentSnapshot>> equipmentByType = {};
+          // تجميع البيانات (التي أصبحت Map الآن)
+          final Map<String, List<dynamic>> equipmentByType = {};
           for (var equipment in equipmentList) {
             final type = equipment['type'] as String? ?? 'other';
-            if (equipmentByType[type] == null) {
-              equipmentByType[type] = [];
-            }
+            if (equipmentByType[type] == null) equipmentByType[type] = [];
             equipmentByType[type]!.add(equipment);
           }
-
           final sortedTypes = equipmentByType.keys.toList()..sort();
 
           return ListView.builder(
@@ -176,7 +148,6 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
               final type = sortedTypes[index];
               final items = equipmentByType[type]!;
 
-              // حاوية المجموعة (الكارد الكبير)
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
@@ -184,23 +155,20 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Theme(
-                  // إزالة الخط الفاصل الافتراضي
                   data: Theme.of(
                     context,
                   ).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
                     initiallyExpanded: true,
                     collapsedIconColor: Colors.grey,
-                    iconColor: const Color(0xFF8FA1B4), // لون السهم
-                    // عنوان المجموعة (الأيقونة الزرقاء والنص)
+                    iconColor: const Color(0xFF8FA1B4),
                     title: Row(
                       children: [
-                        // الأيقونة الدائرية (يمين)
                         CircleAvatar(
                           radius: 18,
                           backgroundColor: const Color(
                             0xFF3F51B5,
-                          ).withOpacity(0.2), // خلفية زرقاء شفافة
+                          ).withOpacity(0.2),
                           child: Icon(
                             _getIconForType(type),
                             color: const Color(0xFF5C6BC0),
@@ -208,7 +176,6 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        // اسم النوع والعدد
                         Text(
                           '${_translateKey(type)} (${items.length})',
                           style: const TextStyle(
@@ -219,12 +186,9 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
                         ),
                       ],
                     ),
-
-                    // قائمة العناصر داخل المجموعة
                     children: items.map((item) {
-                      final data = item.data() as Map<String, dynamic>;
-                      final imageUrl = data['imageUrl'];
-                      final status = data['status'] ?? 'available';
+                      final imageUrl = item['imageUrl'];
+                      final status = item['status'] ?? 'available';
 
                       return Container(
                         padding: const EdgeInsets.symmetric(
@@ -232,7 +196,6 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          // خط فاصل خفيف بين العناصر
                           border: Border(
                             top: BorderSide(
                               color: Colors.white.withOpacity(0.05),
@@ -241,21 +204,95 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
                         ),
                         child: Row(
                           children: [
-                            // 1. الصورة (يمين - Leading)
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => EquipmentHistoryScreen(
-                                      equipmentId: item.id,
-                                      equipmentName: data['name'] ?? '',
-                                    ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                              onPressed: () => _showDeleteConfirmationDialog(
+                                item['id'],
+                                item['name'],
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            const SizedBox(width: 16),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.edit,
+                                color: Colors.blue,
+                                size: 20,
+                              ),
+                              // ملاحظة: يجب تحديث EditEquipmentScreen ليقبل Map أيضاً
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      EditEquipmentScreen(equipment: item),
+                                ),
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            const SizedBox(width: 16),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(status).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: _getStatusColor(status),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                _translateKey(status),
+                                style: TextStyle(
+                                  color: _getStatusColor(status),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  item['name'] ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
                                   ),
-                                );
-                              },
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  _translateKey(item['type'] ?? 'other'),
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EquipmentHistoryScreen(
+                                    equipmentId: item['id'],
+                                    equipmentName: item['name'] ?? '',
+                                  ),
+                                ),
+                              ),
                               child: CircleAvatar(
-                                radius: 24,
+                                radius: 22,
                                 backgroundColor: Colors.grey.shade800,
                                 backgroundImage:
                                     (imageUrl != null && imageUrl.isNotEmpty)
@@ -263,102 +300,12 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
                                     : null,
                                 child: (imageUrl == null || imageUrl.isEmpty)
                                     ? Icon(
-                                        _getIconForType(data['type']),
+                                        _getIconForType(item['type']),
                                         color: Colors.grey,
                                         size: 20,
                                       )
                                     : null,
                               ),
-                            ),
-                            const SizedBox(width: 12),
-
-                            // 2. النصوص (الاسم والنوع)
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    data['name'] ?? '',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    _translateKey(data['type'] ?? 'other'),
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 3. أزرار التحكم والحالة (يسار - Trailing)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // شارة الحالة (الكبسولة الملونة)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _getStatusColor(
-                                      status,
-                                    ).withOpacity(0.2), // خلفية شفافة
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: _getStatusColor(status),
-                                      width: 1,
-                                    ), // حدود ملونة
-                                  ),
-                                  child: Text(
-                                    _translateKey(status),
-                                    style: TextStyle(
-                                      color: _getStatusColor(
-                                        status,
-                                      ), // لون النص نفس لون الحدود
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                // زر التعديل (قلم)
-                                InkWell(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => EditEquipmentScreen(
-                                          equipment: item,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: const Icon(
-                                    Icons.edit,
-                                    color: Color(0xFF64B5F6),
-                                    size: 20,
-                                  ), // أزرق فاتح
-                                ),
-                                const SizedBox(width: 12),
-                                // زر الحذف (سلة مهملات)
-                                InkWell(
-                                  onTap: () =>
-                                      _showDeleteConfirmationDialog(item),
-                                  child: const Icon(
-                                    Icons.delete,
-                                    color: Color(0xFFEF5350),
-                                    size: 20,
-                                  ), // أحمر فاتح
-                                ),
-                              ],
                             ),
                           ],
                         ),

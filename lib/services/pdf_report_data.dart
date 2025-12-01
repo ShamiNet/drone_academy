@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class LevelProgress {
   final int level;
   final int completedTrainings;
@@ -16,10 +14,15 @@ class LevelProgress {
 
 class PdfReportData {
   final String traineeName;
-  final List<QueryDocumentSnapshot> results;
-  final List<QueryDocumentSnapshot> notes;
+
+  // --- التعديل هنا: استخدام List<dynamic> بدلاً من QueryDocumentSnapshot ---
+  final List<dynamic> results;
+  final List<dynamic> notes;
+  // -----------------------------------------------------------------------
+
   final String? aiSummary;
   final LevelProgress? levelProgress;
+  final double? averageMastery;
 
   PdfReportData({
     required this.traineeName,
@@ -27,5 +30,6 @@ class PdfReportData {
     required this.notes,
     this.aiSummary,
     this.levelProgress,
+    this.averageMastery,
   });
 }
