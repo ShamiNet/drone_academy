@@ -3,13 +3,13 @@ import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_dashboard.dart';
 import 'package:drone_academy/screens/equipment_checkout_screen.dart';
 import 'package:drone_academy/screens/inventory_screen.dart';
+import 'package:drone_academy/screens/login_screen.dart';
 import 'package:drone_academy/screens/my_progress_screen.dart';
 import 'package:drone_academy/screens/profile_screen.dart';
 import 'package:drone_academy/screens/trainee_competitions_screen.dart';
 import 'package:drone_academy/screens/trainee_dashboard.dart';
 import 'package:drone_academy/screens/trainer_dashboard.dart';
-import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
 class ThemeService {
@@ -41,43 +41,40 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
+    // --- التعديل الجوهري: الاعتماد على ApiService.currentUser بدلاً من Firebase ---
+    final apiUser = ApiService.currentUser;
 
-    if (user != null) {
-      try {
-        // استخدام ApiService
-        final userData = await _apiService.fetchUser(user.uid);
-
-        if (mounted) {
-          if (userData != null) {
-            setState(() {
-              _userName = userData['displayName'];
-              _userRole = userData['role'];
-              _photoUrl = userData['photoUrl'];
-              _isLoading = false;
-            });
-          } else {
-            setState(() {
-              _userRole = 'trainee';
-              _userName = user.displayName ?? 'User';
-              _isLoading = false;
-            });
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _userRole = 'trainee';
-          });
-        }
+    if (apiUser != null) {
+      print("🔵 HomeScreen: Loading from ApiService Memory...");
+      if (mounted) {
+        setState(() {
+          _userName = apiUser['displayName'];
+          _userRole = (apiUser['role'] ?? 'trainee')
+              .toString()
+              .toLowerCase()
+              .trim();
+          _photoUrl = apiUser['photoUrl'];
+          _isLoading = false;
+        });
+        print("🟢 Role set to: $_userRole");
       }
     } else {
-      if (mounted) setState(() => _isLoading = false);
+      // إذا لم يكن هناك مستخدم في الذاكرة (مثلاً عند إعادة تشغيل التطبيق بالكامل)
+      // هنا يجب عادةً العودة لشاشة تسجيل الدخول أو استخدام التخزين المحلي
+      print("🔴 HomeScreen: No user in memory. Redirecting to Login...");
+      if (mounted) {
+        Future.delayed(Duration.zero, () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        });
+      }
     }
   }
 
   Widget _buildBody(AppLocalizations l10n) {
+    // توجيه حسب الدور
     if (_userRole == 'owner' || _userRole == 'admin') {
       return const AdminDashboard();
     } else if (_userRole == 'trainer') {
@@ -121,11 +118,9 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Text(l10n.welcome, style: const TextStyle(fontSize: 24)),
             const SizedBox(height: 10),
-            const Text("Role not assigned or unknown."),
-            ElevatedButton(
-              onPressed: _fetchUserData,
-              child: const Text("Retry"),
-            ),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 10),
+            const Text("Loading user data..."),
           ],
         ),
       );
@@ -139,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isLoading ? l10n.loading : l10n.home),
+        title: Text(_isLoading ? l10n.loading : (_userName ?? l10n.home)),
         actions: [
           IconButton(
             tooltip: brightness == Brightness.dark ? 'وضع نهاري' : 'وضع ليلي',
@@ -166,7 +161,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder: (context) =>
                         ProfileScreen(setLocale: widget.setLocale),
                   ),
-                ).then((_) => _fetchUserData());
+                ).then((_) {
+                  // إعادة تحميل البيانات عند العودة من البروفايل
+                  // لكن بحذر لأننا نعتمد على الذاكرة
+                  setState(() {
+                    if (ApiService.currentUser != null) {
+                      _userName = ApiService.currentUser!['displayName'];
+                      _photoUrl = ApiService.currentUser!['photoUrl'];
+                    }
+                  });
+                });
               },
               child: CircleAvatar(
                 backgroundColor: Colors.grey.shade300,

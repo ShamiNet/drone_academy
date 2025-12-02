@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/add_user_screen.dart';
-// import 'package:drone_academy/screens/user_details_screen.dart'; // قد تحتاج لتعديل هذه الشاشة أيضاً لاحقاً
-import 'package:drone_academy/services/api_service.dart'; // استيراد الخدمة الجديدة
+import 'package:drone_academy/screens/trainee_profile_screen.dart'; // <-- استيراد هام جداً
+import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/widgets/empty_state_widget.dart';
 import 'package:flutter/material.dart';
 
@@ -14,11 +14,11 @@ class ManageUsersScreen extends StatefulWidget {
 }
 
 class _ManageUsersScreenState extends State<ManageUsersScreen> {
-  // تعريف الخدمة
   final ApiService _apiService = ApiService();
 
   String _searchQuery = '';
-  String _selectedRoleFilter = 'All';
+  String _selectedRoleFilter = 'trainee';
+  String _selectedManagerFilter = 'All';
   int _selectedTab = 0;
 
   @override
@@ -31,248 +31,303 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: Column(
-        children: [
-          // --- 1. التبويبات العلوية ---
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Container(
-              height: 45,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2C2C),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: Colors.grey.shade800),
-              ),
-              child: Row(
-                children: [
-                  _buildTabItem(l10n.all, 0),
-                  _buildVerticalDivider(),
-                  _buildTabItem(l10n.blockUser, 1, isDanger: true),
-                  _buildVerticalDivider(),
-                  _buildTabItem(l10n.active, 2, isSuccess: true),
-                ],
-              ),
-            ),
-          ),
+      body: StreamBuilder<List<dynamic>>(
+        stream: _apiService.streamUsers(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          // --- 2. البحث والفلترة ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Column(
-              children: [
-                TextField(
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث عن مستخدم...',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    filled: true,
-                    fillColor: cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+          final allUsers = snapshot.data ?? [];
+
+          final managers = allUsers.where((u) {
+            final r = u['role'] ?? '';
+            return r == 'admin' || r == 'trainer';
+          }).toList();
+
+          final filteredUsers = allUsers.where((user) {
+            final name = (user['displayName'] ?? '').toString().toLowerCase();
+            final email = (user['email'] ?? '').toString().toLowerCase();
+            final role = user['role'] ?? 'trainee';
+            final parentId = user['parentId'] ?? '';
+            final isBlocked = user['isBlocked'] ?? false;
+
+            if (_searchQuery.isNotEmpty &&
+                !name.contains(_searchQuery.toLowerCase()) &&
+                !email.contains(_searchQuery.toLowerCase())) {
+              return false;
+            }
+
+            if (_selectedRoleFilter != 'All' && role != _selectedRoleFilter) {
+              return false;
+            }
+
+            if (_selectedManagerFilter != 'All' &&
+                parentId != _selectedManagerFilter) {
+              return false;
+            }
+
+            if (_selectedTab == 1 && !isBlocked) return false;
+
+            return true;
+          }).toList();
+
+          return Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                  ),
-                  onChanged: (val) => setState(() => _searchQuery = val),
+                  ],
                 ),
-                const SizedBox(height: 12),
-
-                Container(
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF3F51B5),
-                      width: 1,
-                    ),
-                  ),
-                  child: Theme(
-                    data: Theme.of(
-                      context,
-                    ).copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      key: Key(_selectedRoleFilter),
-                      title: Text(
-                        _getRoleLabel(_selectedRoleFilter, l10n),
-                        style: const TextStyle(color: Colors.white),
+                child: Column(
+                  children: [
+                    TextField(
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'ابحث عن مستخدم...',
+                        hintStyle: const TextStyle(color: Colors.grey),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                        ),
+                        filled: true,
+                        fillColor: cardColor,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       ),
-                      iconColor: Colors.white,
-                      collapsedIconColor: Colors.white,
-                      children: [
-                        _buildRoleOption('All', l10n.allRoles),
-                        _buildRoleOption('admin', l10n.admin),
-                        _buildRoleOption('trainer', l10n.trainer),
-                        _buildRoleOption('trainee', l10n.iAmATrainee),
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildDropdownFilter(
+                      value: _selectedRoleFilter,
+                      label: 'الدور',
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'All',
+                          child: Text('جميع الأدوار'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'admin',
+                          child: Text(l10n.admin),
+                        ),
+                        DropdownMenuItem(
+                          value: 'trainer',
+                          child: Text(l10n.trainer),
+                        ),
+                        DropdownMenuItem(
+                          value: 'trainee',
+                          child: Text(l10n.trainees),
+                        ),
                       ],
+                      onChanged: (val) =>
+                          setState(() => _selectedRoleFilter = val!),
                     ),
-                  ),
+
+                    const SizedBox(height: 8),
+
+                    if (_selectedRoleFilter == 'trainee' ||
+                        _selectedRoleFilter == 'All')
+                      _buildDropdownFilter(
+                        value: _selectedManagerFilter,
+                        label: l10n.filterByManager,
+                        items: [
+                          DropdownMenuItem(
+                            value: 'All',
+                            child: Text(l10n.allManagers),
+                          ),
+                          ...managers.map(
+                            (m) => DropdownMenuItem(
+                              value: m['id'] ?? m['uid'],
+                              child: Text(m['displayName'] ?? 'Unknown'),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedManagerFilter = val!),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
 
-          const SizedBox(height: 16),
-
-          // --- 3. قائمة المستخدمين (تستخدم ApiService) ---
-          Expanded(
-            child: StreamBuilder<List<dynamic>>(
-              // تغيير النوع إلى List<dynamic>
-              stream: _apiService.streamUsers(), // استخدام دالة الـ Proxy
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                // التعامل مع البيانات القادمة من JSON
-                final usersList = snapshot.data ?? [];
-
-                if (usersList.isEmpty) {
-                  return EmptyStateWidget(
-                    message: l10n.noUsersFound,
-                    imagePath: 'assets/illustrations/no_data.svg',
-                  );
-                }
-
-                // منطق الفلترة (يتم محلياً)
-                var filteredUsers = usersList.where((user) {
-                  // user هو عبارة عن Map<String, dynamic>
-                  final name = (user['displayName'] ?? '')
-                      .toString()
-                      .toLowerCase();
-                  final email = (user['email'] ?? '').toString().toLowerCase();
-                  final role = user['role'] ?? 'trainee';
-                  final isBlocked = user['isBlocked'] ?? false;
-
-                  if (_searchQuery.isNotEmpty &&
-                      !name.contains(_searchQuery.toLowerCase()) &&
-                      !email.contains(_searchQuery.toLowerCase())) {
-                    return false;
-                  }
-
-                  if (_selectedRoleFilter != 'All' &&
-                      role != _selectedRoleFilter) {
-                    return false;
-                  }
-
-                  if (_selectedTab == 1 && !isBlocked) return false;
-                  if (_selectedTab == 2 && isBlocked) return false;
-
-                  return true;
-                }).toList();
-
-                if (filteredUsers.isEmpty) {
-                  return Center(
-                    child: Text(
-                      l10n.noResultsFound,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: filteredUsers.length,
-                  itemBuilder: (context, index) {
-                    final user = filteredUsers[index]; // Map<String, dynamic>
-                    final isBlocked = user['isBlocked'] ?? false;
-                    final userId =
-                        user['id'] ?? user['uid']; // التأكد من وجود المعرف
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+              Expanded(
+                child: filteredUsers.isEmpty
+                    ? Center(
+                        child: Text(
+                          l10n.noResultsFound,
+                          style: const TextStyle(color: Colors.grey),
                         ),
-                        // زر التبديل للحظر (يستخدم ApiService)
-                        leading: _buildBlockSwitch(userId, isBlocked),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredUsers.length,
+                        itemBuilder: (context, index) {
+                          final user = filteredUsers[index];
+                          final isBlocked = user['isBlocked'] ?? false;
+                          final userId = user['id'] ?? user['uid'];
 
-                        title: Text(
-                          user['displayName'] ?? 'No Name',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user['email'] ?? '',
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
+                          // دالة الانتقال لبروفايل المتدرب
+                          void openTraineeProfile() {
+                            // نمرر بيانات المستخدم (Map) مباشرة إلى الشاشة
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    TraineeProfileScreen(traineeData: user),
                               ),
+                            );
+                          }
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isBlocked
-                                    ? Colors.red.withOpacity(0.2)
-                                    : Colors.grey.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: isBlocked
-                                      ? Colors.red
-                                      : Colors.grey.shade700,
+                            child: Row(
+                              children: [
+                                // 1. أزرار التحكم (حذف وتعديل) - يسار
+                                Column(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => _showDeleteDialog(
+                                        userId,
+                                        user['displayName'],
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    // زر التعديل/العرض
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.visibility,
+                                        color: Colors.blue,
+                                        size: 20,
+                                      ),
+                                      onPressed:
+                                          openTraineeProfile, // النقر يفتح البروفايل
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              child: Text(
-                                isBlocked
-                                    ? 'محظور'
-                                    : (user['role'] ?? 'trainee'),
-                                style: TextStyle(
-                                  color: isBlocked
-                                      ? Colors.red
-                                      : Colors.grey.shade400,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                                const SizedBox(width: 12),
 
-                        // زر التفاصيل
-                        trailing: GestureDetector(
-                          onTap: () {
-                            // ملاحظة: UserDetailsScreen تحتاج أيضاً لتعديل لتقبل Map بدلاً من DocumentSnapshot
-                            // أو يمكنك تمرير البيانات بشكل مختلف. للآن سأعطلها مؤقتاً لتجنب الأخطاء
-                            // Navigator.push(context, MaterialPageRoute(builder: (_) => UserDetailsScreen(userData: user)));
-                          },
-                          child: CircleAvatar(
-                            radius: 24,
-                            backgroundColor: Colors.blue,
-                            backgroundImage:
-                                (user['photoUrl'] != null &&
-                                    user['photoUrl'] != '')
-                                ? CachedNetworkImageProvider(user['photoUrl'])
-                                : null,
-                            child:
-                                (user['photoUrl'] == null ||
-                                    user['photoUrl'] == '')
-                                ? const Icon(Icons.person, color: Colors.white)
-                                : null,
-                          ),
-                        ),
+                                // 2. المعلومات (وسط) - جعلها قابلة للنقر أيضاً
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap:
+                                        openTraineeProfile, // النقر يفتح البروفايل
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          user['displayName'] ?? 'No Name',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          user['email'] ?? '',
+                                          style: const TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                        if (isBlocked)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 4.0,
+                                            ),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.red.withOpacity(
+                                                  0.2,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                              child: const Text(
+                                                'محظور',
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+
+                                // 3. الصورة (يمين) - النقر عليها يفتح البروفايل
+                                GestureDetector(
+                                  onTap: openTraineeProfile,
+                                  child: CircleAvatar(
+                                    radius: 26,
+                                    backgroundColor: Colors.blue.shade700,
+                                    backgroundImage:
+                                        (user['photoUrl'] != null &&
+                                            user['photoUrl'] != '')
+                                        ? CachedNetworkImageProvider(
+                                            user['photoUrl'],
+                                          )
+                                        : null,
+                                    child:
+                                        (user['photoUrl'] == null ||
+                                            user['photoUrl'] == '')
+                                        ? const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                            size: 28,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
           context,
@@ -285,120 +340,74 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  // --- دوال مساعدة ---
-
-  Widget _buildTabItem(
-    String label,
-    int index, {
-    bool isDanger = false,
-    bool isSuccess = false,
+  Widget _buildDropdownFilter({
+    required String value,
+    required String label,
+    required List<DropdownMenuItem<String>> items,
+    required ValueChanged<String?> onChanged,
   }) {
-    final bool isSelected = _selectedTab == index;
-    Color textColor = Colors.grey;
-    if (isSelected) {
-      textColor = Colors.white;
-    }
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedTab = index),
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDanger
-                      ? Colors.red.withOpacity(0.2)
-                      : (isSuccess
-                            ? Colors.green.withOpacity(0.2)
-                            : Colors.grey.shade700))
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 13,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2230),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF3F51B5), width: 1),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF1E2230),
+          style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+          selectedItemBuilder: (context) {
+            return items.map((item) {
+              return Align(
+                alignment: Alignment.centerRight,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    ),
+                    item.child,
+                  ],
                 ),
-              ),
-              if (isSelected && (isDanger || isSuccess)) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  isDanger ? Icons.block : Icons.check_circle,
-                  size: 14,
-                  color: isDanger ? Colors.red : Colors.green,
-                ),
-              ],
-            ],
-          ),
+              );
+            }).toList();
+          },
         ),
       ),
     );
   }
 
-  Widget _buildVerticalDivider() {
-    return Container(width: 1, height: 20, color: Colors.grey.shade800);
-  }
-
-  Widget _buildRoleOption(String roleValue, String label) {
-    return ListTile(
-      title: Text(label, style: const TextStyle(color: Colors.white)),
-      onTap: () {
-        setState(() {
-          _selectedRoleFilter = roleValue;
-        });
-      },
-      trailing: _selectedRoleFilter == roleValue
-          ? const Icon(Icons.check, color: Colors.orange)
-          : null,
-    );
-  }
-
-  String _getRoleLabel(String role, AppLocalizations l10n) {
-    switch (role) {
-      case 'admin':
-        return l10n.admin;
-      case 'trainer':
-        return l10n.trainer;
-      case 'trainee':
-        return l10n.trainees;
-      default:
-        return 'جميع الأدوار';
-    }
-  }
-
-  // ويدجت التبديل (Switch) الذي يتصل بالسيرفر
-  Widget _buildBlockSwitch(String userId, bool isBlocked) {
-    return Transform.scale(
-      scale: 0.8,
-      child: Switch(
-        value: !isBlocked, // تفعيل = حساب نشط
-        onChanged: (val) async {
-          // استدعاء API لتحديث الحالة
-          final success = await _apiService.updateUser({
-            'uid': userId,
-            'isBlocked': !val, // عكس القيمة لأن val هي "النشاط"
-          });
-
-          if (!success) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("فشل تحديث الحالة. تأكد من الاتصال بالسيرفر."),
-                ),
-              );
-            }
-          }
-          // الستريم سيقوم بتحديث الواجهة تلقائياً بعد نجاح العملية في السيرفر
-        },
-        activeColor: Colors.white,
-        activeTrackColor: Colors.grey.shade600,
-        inactiveThumbColor: Colors.red,
-        inactiveTrackColor: Colors.red.withOpacity(0.3),
+  void _showDeleteDialog(String userId, String? userName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2230),
+        title: const Text("تأكيد الحذف", style: TextStyle(color: Colors.white)),
+        content: Text(
+          "هل أنت متأكد من حذف ${userName ?? 'المستخدم'}؟",
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              await _apiService.deleteUser(userId);
+              if (mounted) Navigator.pop(ctx);
+            },
+            child: const Text("حذف", style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }

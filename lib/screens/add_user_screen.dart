@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +17,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
   final _displayNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final ApiService _apiService = ApiService();
 
   String _selectedRole = 'trainee';
   String? _selectedParentId;
@@ -30,22 +31,20 @@ class _AddUserScreenState extends State<AddUserScreen> {
     super.dispose();
   }
 
-  // --- بداية التعديل الكبير: دالة إنشاء المستخدم الجديدة ---
   Future<void> _createUser() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
 
     FirebaseApp? tempApp;
     try {
-      // 1. إنشاء اتصال مؤقت ومنفصل بـ Firebase باسم فريد
+      // 1. إنشاء المستخدم في Auth (محاولة من التطبيق)
+      // ملاحظة: إذا كان Auth محظوراً، يجب استخدام VPN أو إضافة دالة create_user في السيرفر
       tempApp = await Firebase.initializeApp(
         name: 'temporaryRegister',
         options: Firebase.app().options,
       );
 
-      // 2. استخدام هذا الاتصال المؤقت لإنشاء المستخدم الجديد
       final UserCredential userCredential =
           await FirebaseAuth.instanceFor(
             app: tempApp,
@@ -56,52 +55,41 @@ class _AddUserScreenState extends State<AddUserScreen> {
 
       final newUserUid = userCredential.user?.uid;
       if (newUserUid != null) {
-        // 3. الآن نستخدم اتصالنا الأساسي لحفظ بيانات المستخدم في Firestore
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(newUserUid)
-            .set({
-              'uid': newUserUid,
-              'displayName': _displayNameController.text,
-              'email': _emailController.text,
-              'role': _selectedRole,
-              'parentId': _selectedParentId ?? '',
-              'photoUrl': '',
-              'fcmToken': '', // سيتم تحديثه عند أول تسجيل دخول للمستخدم الجديد
-            });
+        // 2. حفظ البيانات عبر السيرفر (بدلاً من Firestore مباشرة)
+        final success = await _apiService.updateUser({
+          'uid': newUserUid,
+          'displayName': _displayNameController.text,
+          'email': _emailController.text,
+          'role': _selectedRole,
+          'parentId': _selectedParentId ?? '',
+          'photoUrl': '',
+          'fcmToken': '',
+          'createdAt': DateTime.now().toIso8601String(),
+        });
 
-        if (mounted) {
+        if (success && mounted) {
           showCustomSnackBar(
             context,
             'User created successfully!',
             isError: false,
           );
           Navigator.of(context).pop();
+        } else if (mounted) {
+          showCustomSnackBar(
+            context,
+            'User created in Auth but failed to save data.',
+          );
         }
       }
     } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        // يمكننا استخدام نفس نظام رسائل الخطأ الذي أنشأناه سابقاً
-        showCustomSnackBar(
-          context,
-          e.message ?? 'An error occurred during sign up.',
-        );
-      }
+      if (mounted) showCustomSnackBar(context, e.message ?? 'Auth Error');
     } catch (e) {
-      if (mounted) {
-        showCustomSnackBar(context, 'An unexpected error occurred.');
-      }
+      if (mounted) showCustomSnackBar(context, 'Error: $e');
     } finally {
-      // 4. الأهم: حذف الاتصال المؤقت دائماً، سواء نجحت العملية أو فشلت
-      if (tempApp != null) {
-        await tempApp.delete();
-      }
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (tempApp != null) await tempApp.delete();
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-  // --- نهاية التعديل الكبير ---
 
   @override
   Widget build(BuildContext context) {
@@ -119,75 +107,64 @@ class _AddUserScreenState extends State<AddUserScreen> {
                   TextFormField(
                     controller: _displayNameController,
                     decoration: InputDecoration(labelText: l10n.fullName),
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please enter a name' : null,
+                    validator: (v) => v!.isEmpty ? 'Please enter a name' : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _emailController,
                     decoration: InputDecoration(labelText: l10n.email),
                     keyboardType: TextInputType.emailAddress,
-                    validator: (value) =>
-                        value!.isEmpty ? 'Please enter an email' : null,
+                    validator: (v) =>
+                        v!.isEmpty ? 'Please enter an email' : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
                     decoration: InputDecoration(labelText: l10n.password),
                     obscureText: true,
-                    validator: (value) => value!.length < 6
-                        ? 'Password must be at least 6 characters'
+                    validator: (v) => v!.length < 6
+                        ? 'Password must be at least 6 chars'
                         : null,
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    l10n.role,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
                   DropdownButtonFormField<String>(
                     value: _selectedRole,
-                    items: ['trainee', 'trainer', 'admin'].map((String role) {
-                      return DropdownMenuItem<String>(
-                        value: role,
-                        child: Text(role),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null)
-                        setState(() => _selectedRole = newValue);
-                    },
+                    decoration: InputDecoration(labelText: l10n.role),
+                    items: ['trainee', 'trainer', 'admin']
+                        .map(
+                          (role) =>
+                              DropdownMenuItem(value: role, child: Text(role)),
+                        )
+                        .toList(),
+                    onChanged: (val) => setState(() => _selectedRole = val!),
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    l10n.selectNewParent,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('users')
-                        .snapshots(),
+                  // استخدام Stream من السيرفر
+                  StreamBuilder<List<dynamic>>(
+                    stream: _apiService.streamUsers(),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData)
-                        return const Center(child: CircularProgressIndicator());
-                      final users = snapshot.data!.docs;
+                      if (!snapshot.hasData) return const SizedBox.shrink();
+                      final users = snapshot.data!;
                       return DropdownButtonFormField<String?>(
-                        hint: const Text('Top Level'),
+                        hint: Text(l10n.selectNewParent),
                         value: _selectedParentId,
+                        decoration: InputDecoration(
+                          labelText: l10n.selectNewParent,
+                        ),
                         items: [
-                          const DropdownMenuItem<String?>(
+                          const DropdownMenuItem(
                             value: null,
                             child: Text('Top Level'),
                           ),
-                          ...users.map((doc) {
-                            return DropdownMenuItem<String>(
-                              value: doc.id,
-                              child: Text(doc['displayName']),
-                            );
-                          }),
+                          ...users.map(
+                            (u) => DropdownMenuItem<String>(
+                              value: u['id'] ?? u['uid'],
+                              child: Text(u['displayName'] ?? 'Unknown'),
+                            ),
+                          ),
                         ],
-                        onChanged: (String? newValue) {
-                          setState(() => _selectedParentId = newValue);
-                        },
+                        onChanged: (val) =>
+                            setState(() => _selectedParentId = val),
                       );
                     },
                   ),

@@ -1,11 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
 class EditCompetitionScreen extends StatefulWidget {
-  // متغير لاستقبال بيانات المسابقة في حالة التعديل
-  final DocumentSnapshot? competition;
-
+  final Map<String, dynamic>? competition; // Map
   const EditCompetitionScreen({super.key, this.competition});
 
   @override
@@ -13,29 +11,21 @@ class EditCompetitionScreen extends StatefulWidget {
 }
 
 class _EditCompetitionScreenState extends State<EditCompetitionScreen> {
+  final ApiService _apiService = ApiService();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isActive = true;
-
   bool get _isEditing => widget.competition != null;
 
   @override
   void initState() {
     super.initState();
-    // إذا كنا في وضع التعديل، قم بتعبئة الحقول بالبيانات القديمة
     if (_isEditing) {
       _titleController.text = widget.competition!['title'];
       _descriptionController.text = widget.competition!['description'];
       _isActive = widget.competition!['isActive'];
     }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
   }
 
   Future<void> _saveCompetition() async {
@@ -47,28 +37,12 @@ class _EditCompetitionScreenState extends State<EditCompetitionScreen> {
         'isActive': _isActive,
       };
 
-      try {
-        if (_isEditing) {
-          await FirebaseFirestore.instance
-              .collection('competitions')
-              .doc(widget.competition!.id)
-              .update(data);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Competition updated successfully!')),
-          );
-        } else {
-          await FirebaseFirestore.instance.collection('competitions').add(data);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Competition added successfully!')),
-          );
-        }
-        Navigator.of(context).pop();
-      } catch (e) {
-        print('Error saving competition: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save competition.')),
-        );
+      if (_isEditing) {
+        await _apiService.updateCompetition(widget.competition!['id'], data);
+      } else {
+        await _apiService.addCompetition(data);
       }
+      if (mounted) Navigator.of(context).pop();
     }
   }
 
@@ -83,39 +57,26 @@ class _EditCompetitionScreenState extends State<EditCompetitionScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
               TextFormField(
                 controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: l10n.enterTitle,
-                  border: const OutlineInputBorder(),
-                ),
-                validator: (value) => value!.isEmpty ? l10n.enterTitle : null,
+                decoration: InputDecoration(labelText: l10n.enterTitle),
+                validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: l10n.enterDescription,
-                  border: const OutlineInputBorder(),
-                ),
+                decoration: InputDecoration(labelText: l10n.enterDescription),
                 maxLines: 5,
-                validator: (value) =>
-                    value!.isEmpty ? l10n.enterDescription : null,
               ),
-              const SizedBox(height: 16),
               SwitchListTile(
                 title: Text(l10n.activeCompetition),
-                subtitle: Text(
-                  l10n.activeCompetitionSubtitle,
-                  style: const TextStyle(color: Colors.grey),
-                ),
                 value: _isActive,
-                onChanged: (bool value) => setState(() => _isActive = value),
+                onChanged: (v) => setState(() => _isActive = v),
               ),
             ],
           ),

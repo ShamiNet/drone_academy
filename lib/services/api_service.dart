@@ -1,26 +1,147 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  ApiService._internal();
+
   final String baseUrl = 'http://qaaz.live:3000/api';
   final Duration pollingInterval = const Duration(seconds: 5);
+
+  static Map<String, dynamic>? currentUser;
+  static const String _userKey = 'cached_user_data';
 
   void _logError(String context, Object error) {
     print("ApiService Error [$context]: $error");
   }
 
-  // --- Helper for Streams: Emit immediately then periodically ---
-  Stream<T> _createPollingStream<T>(Future<T> Function() fetcher) async* {
-    // 1. Emit data immediately
-    yield await fetcher();
-    // 2. Then emit periodically
-    yield* Stream.periodic(pollingInterval).asyncMap((_) => fetcher());
+  // --- دوال الكاش الدائم (Disk Cache) ---
+  Future<void> _saveToDisk(String key, List<dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, json.encode(data));
+    } catch (e) {
+      print("Cache Save Error ($key): $e");
+    }
   }
 
-  // --- Users ---
+  Future<List<dynamic>> _loadFromDisk(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(key)) {
+        final String? dataString = prefs.getString(key);
+        if (dataString != null) {
+          print("📦 Loaded from Disk: $key");
+          return List<dynamic>.from(json.decode(dataString));
+        }
+      }
+    } catch (e) {
+      print("Cache Load Error ($key): $e");
+    }
+    return [];
+  }
+
+  // --- المحرك الذكي للستريم (مع الكاش الدائم) ---
+  Stream<List<dynamic>> _createSmartStream({
+    required Future<List<dynamic>> Function() fetcher,
+    required String cacheKey, // مفتاح الحفظ في الهاتف
+  }) {
+    late StreamController<List<dynamic>> controller;
+    Timer? timer;
+
+    // دالة الجلب من السيرفر
+    void tick() async {
+      if (controller.isClosed) return;
+      try {
+        final data = await fetcher();
+        if (!controller.isClosed && data.isNotEmpty) {
+          // تحديث فقط إذا وجد بيانات
+          controller.add(data); // إرسال للتطبيق
+          _saveToDisk(cacheKey, data); // حفظ في الموبايل
+        }
+      } catch (e) {
+        // في حال فشل النت، لا نفعل شيئاً (تبقى البيانات القديمة معروضة)
+      }
+    }
+
+    void start() async {
+      // 1. فوراً: اعرض البيانات المحفوظة في الموبايل (Offline Data)
+      final cachedData = await _loadFromDisk(cacheKey);
+      if (cachedData.isNotEmpty && !controller.isClosed) {
+        controller.add(cachedData);
+      }
+
+      // 2. ابدأ الجلب من السيرفر للتحديث (Live Data)
+      tick();
+      timer = Timer.periodic(pollingInterval, (_) => tick());
+    }
+
+    void stop() {
+      timer?.cancel();
+    }
+
+    controller = StreamController<List<dynamic>>(
+      onListen: start,
+      onCancel: stop,
+    );
+
+    return controller.stream.asBroadcastStream();
+  }
+
+  // ===========================================================================
+  // 0. Auth
+  // ===========================================================================
+  Future<bool> login(String email, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'email': email, 'password': password}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        currentUser = data;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_userKey, json.encode(data));
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> tryAutoLogin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!prefs.containsKey(_userKey)) return false;
+      final userDataString = prefs.getString(_userKey);
+      if (userDataString != null) {
+        currentUser = json.decode(userDataString);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> logout() async {
+    currentUser = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // مسح كل الكاش عند الخروج
+  }
+
+  // ===========================================================================
+  // 1. المستخدمين (Users)
+  // ===========================================================================
+  // نمرر مفتاح الكاش "CACHE_USERS" ليتم الحفظ باسمه
   Stream<List<dynamic>> streamUsers() =>
-      _createPollingStream(fetchUsers).asBroadcastStream();
+      _createSmartStream(fetcher: fetchUsers, cacheKey: 'CACHE_USERS');
 
   Future<List<dynamic>> fetchUsers() async {
     try {
@@ -29,7 +150,6 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchUsers', e);
       return [];
     }
   }
@@ -43,7 +163,6 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      _logError('updateUser', e);
       return false;
     }
   }
@@ -53,14 +172,33 @@ class ApiService {
       final response = await http.delete(Uri.parse('$baseUrl/users/$uid'));
       return response.statusCode == 200;
     } catch (e) {
-      _logError('deleteUser', e);
       return false;
     }
   }
 
-  // --- Equipment ---
+  Future<Map<String, dynamic>?> fetchUser(String uid) async {
+    // محاولة البحث في الكاش المحلي للمستخدمين أولاً
+    final users = await _loadFromDisk('CACHE_USERS');
+    final cachedUser = users.firstWhere(
+      (u) => (u['id'] ?? u['uid']) == uid,
+      orElse: () => null,
+    );
+    if (cachedUser != null) return cachedUser;
+
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/$uid'));
+      if (response.statusCode == 200) return json.decode(response.body);
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ===========================================================================
+  // 2. المعدات (Equipment)
+  // ===========================================================================
   Stream<List<dynamic>> streamEquipment() =>
-      _createPollingStream(fetchEquipment).asBroadcastStream();
+      _createSmartStream(fetcher: fetchEquipment, cacheKey: 'CACHE_EQUIPMENT');
 
   Future<List<dynamic>> fetchEquipment() async {
     try {
@@ -69,7 +207,6 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchEquipment', e);
       return [];
     }
   }
@@ -83,23 +220,6 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      _logError('updateEquipment', e);
-      return false;
-    }
-  }
-
-  Future<bool> addEquipmentLog(Map<String, dynamic> logData) async {
-    try {
-      if (logData['checkOutTime'] != null)
-        logData['checkOutTime'] = logData['checkOutTime'].toIso8601String();
-      final response = await http.post(
-        Uri.parse('$baseUrl/equipment_log'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(logData),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      _logError('addEquipmentLog', e);
       return false;
     }
   }
@@ -108,57 +228,68 @@ class ApiService {
     try {
       if (data['createdAt'] != null)
         data['createdAt'] = DateTime.now().toIso8601String();
-      final response = await http.post(
+      await http.post(
         Uri.parse('$baseUrl/equipment'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addEquipment', e);
       return false;
     }
   }
 
-  Future<List<dynamic>> fetchEquipmentLogs(String equipmentId) async {
+  Future<bool> addEquipmentLog(Map<String, dynamic> data) async {
+    try {
+      if (data['checkOutTime'] != null)
+        data['checkOutTime'] = data['checkOutTime'].toIso8601String();
+      await http.post(
+        Uri.parse('$baseUrl/equipment_log'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<dynamic>> fetchEquipmentLogs(String id) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/equipment_log?equipmentId=$equipmentId'),
+        Uri.parse('$baseUrl/equipment_log?equipmentId=$id'),
       );
       if (response.statusCode == 200)
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchEquipmentLogs', e);
       return [];
     }
   }
 
   Future<bool> deleteEquipment(String id) async {
     try {
-      final response = await http.delete(Uri.parse('$baseUrl/equipment/$id'));
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/equipment/$id'));
+      return true;
     } catch (e) {
-      _logError('deleteEquipment', e);
       return false;
     }
   }
 
   Future<bool> deleteEquipmentLog(String id) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/equipment_log/$id'),
-      );
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/equipment_log/$id'));
+      return true;
     } catch (e) {
-      _logError('deleteEquipmentLog', e);
       return false;
     }
   }
 
-  // --- Inventory ---
+  // ===========================================================================
+  // 3. المخزون (Inventory)
+  // ===========================================================================
   Stream<List<dynamic>> streamInventory() =>
-      _createPollingStream(fetchInventory).asBroadcastStream();
+      _createSmartStream(fetcher: fetchInventory, cacheKey: 'CACHE_INVENTORY');
 
   Future<List<dynamic>> fetchInventory() async {
     try {
@@ -167,7 +298,6 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchInventory', e);
       return [];
     }
   }
@@ -184,23 +314,6 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      _logError('updateInventoryItem', e);
-      return false;
-    }
-  }
-
-  Future<bool> addInventoryLog(Map<String, dynamic> logData) async {
-    try {
-      if (logData['date'] != null)
-        logData['date'] = logData['date'].toIso8601String();
-      final response = await http.post(
-        Uri.parse('$baseUrl/inventory_log'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(logData),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      _logError('addInventoryLog', e);
       return false;
     }
   }
@@ -209,45 +322,58 @@ class ApiService {
     try {
       if (data['createdAt'] != null)
         data['createdAt'] = DateTime.now().toIso8601String();
-      final response = await http.post(
+      await http.post(
         Uri.parse('$baseUrl/inventory'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addInventoryItem', e);
       return false;
     }
   }
 
-  Future<List<dynamic>> fetchInventoryLogs(String itemId) async {
+  Future<bool> addInventoryLog(Map<String, dynamic> data) async {
+    try {
+      if (data['date'] != null) data['date'] = data['date'].toIso8601String();
+      await http.post(
+        Uri.parse('$baseUrl/inventory_log'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<dynamic>> fetchInventoryLogs(String id) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/inventory_log?itemId=$itemId'),
+        Uri.parse('$baseUrl/inventory_log?itemId=$id'),
       );
       if (response.statusCode == 200)
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchInventoryLogs', e);
       return [];
     }
   }
 
   Future<bool> deleteInventoryItem(String id) async {
     try {
-      final response = await http.delete(Uri.parse('$baseUrl/inventory/$id'));
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/inventory/$id'));
+      return true;
     } catch (e) {
-      _logError('deleteInventoryItem', e);
       return false;
     }
   }
 
-  // --- Trainings ---
+  // ===========================================================================
+  // 4. التدريبات (Trainings)
+  // ===========================================================================
   Stream<List<dynamic>> streamTrainings() =>
-      _createPollingStream(fetchTrainings).asBroadcastStream();
+      _createSmartStream(fetcher: fetchTrainings, cacheKey: 'CACHE_TRAININGS');
 
   Future<List<dynamic>> fetchTrainings() async {
     try {
@@ -256,7 +382,6 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchTrainings', e);
       return [];
     }
   }
@@ -271,7 +396,6 @@ class ApiService {
       if (response.statusCode == 200) return json.decode(response.body)['id'];
       return null;
     } catch (e) {
-      _logError('addTraining', e);
       return null;
     }
   }
@@ -285,7 +409,6 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      _logError('updateTraining', e);
       return false;
     }
   }
@@ -295,7 +418,6 @@ class ApiService {
       final response = await http.delete(Uri.parse('$baseUrl/trainings/$id'));
       return response.statusCode == 200;
     } catch (e) {
-      _logError('deleteTraining', e);
       return false;
     }
   }
@@ -309,62 +431,55 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchSteps', e);
       return [];
     }
   }
 
-  Stream<List<dynamic>> streamSteps(String trainingId) =>
-      _createPollingStream(() => fetchSteps(trainingId)).asBroadcastStream();
+  Stream<List<dynamic>> streamSteps(String tid) => _createSmartStream(
+    fetcher: () => fetchSteps(tid),
+    cacheKey: 'CACHE_STEPS_$tid',
+  );
 
-  Future<bool> addTrainingStep(
-    String trainingId,
-    Map<String, dynamic> data,
-  ) async {
+  Future<bool> addTrainingStep(String tid, Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/trainings/$trainingId/steps'),
+      await http.post(
+        Uri.parse('$baseUrl/trainings/$tid/steps'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addTrainingStep', e);
       return false;
     }
   }
 
   Future<bool> updateTrainingStep(
-    String trainingId,
-    String stepId,
+    String tid,
+    String sid,
     Map<String, dynamic> data,
   ) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/trainings/$trainingId/steps/$stepId'),
+      await http.put(
+        Uri.parse('$baseUrl/trainings/$tid/steps/$sid'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('updateTrainingStep', e);
       return false;
     }
   }
 
-  Future<bool> deleteTrainingStep(String trainingId, String stepId) async {
+  Future<bool> deleteTrainingStep(String tid, String sid) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/trainings/$trainingId/steps/$stepId'),
-      );
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/trainings/$tid/steps/$sid'));
+      return true;
     } catch (e) {
-      _logError('deleteTrainingStep', e);
       return false;
     }
   }
 
-  // --- Results ---
+  // --- Results & Notes ---
   Future<List<dynamic>> fetchResults({String? traineeUid}) async {
     try {
       String url = '$baseUrl/results';
@@ -374,26 +489,23 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchResults', e);
       return [];
     }
   }
 
-  Future<bool> addResult(Map<String, dynamic> resultData) async {
+  Future<bool> addResult(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse('$baseUrl/results'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(resultData),
+        body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addResult', e);
       return false;
     }
   }
 
-  // --- Daily Notes ---
   Future<List<dynamic>> fetchDailyNotes({String? traineeUid}) async {
     try {
       String url = '$baseUrl/daily_notes';
@@ -403,58 +515,54 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchDailyNotes', e);
       return [];
     }
   }
 
-  Future<bool> addDailyNote(Map<String, dynamic> noteData) async {
+  Future<bool> addDailyNote(Map<String, dynamic> data) async {
     try {
-      if (noteData['date'] != null && noteData['date'] is DateTime) {
-        noteData['date'] = (noteData['date'] as DateTime).toIso8601String();
-      }
-      final response = await http.post(
+      if (data['date'] != null && data['date'] is DateTime)
+        data['date'] = (data['date'] as DateTime).toIso8601String();
+      await http.post(
         Uri.parse('$baseUrl/daily_notes'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(noteData),
+        body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addDailyNote', e);
       return false;
     }
   }
 
-  Future<bool> updateDailyNote(String id, Map<String, dynamic> updates) async {
+  Future<bool> updateDailyNote(String id, Map<String, dynamic> data) async {
     try {
-      if (updates['date'] != null && updates['date'] is DateTime) {
-        updates['date'] = (updates['date'] as DateTime).toIso8601String();
-      }
-      final response = await http.put(
+      if (data['date'] != null && data['date'] is DateTime)
+        data['date'] = (data['date'] as DateTime).toIso8601String();
+      await http.put(
         Uri.parse('$baseUrl/daily_notes/$id'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(updates),
+        body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('updateDailyNote', e);
       return false;
     }
   }
 
   Future<bool> deleteDailyNote(String id) async {
     try {
-      final response = await http.delete(Uri.parse('$baseUrl/daily_notes/$id'));
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/daily_notes/$id'));
+      return true;
     } catch (e) {
-      _logError('deleteDailyNote', e);
       return false;
     }
   }
 
   // --- Competitions ---
-  Stream<List<dynamic>> streamCompetitions() =>
-      _createPollingStream(fetchCompetitions).asBroadcastStream();
+  Stream<List<dynamic>> streamCompetitions() => _createSmartStream(
+    fetcher: fetchCompetitions,
+    cacheKey: 'CACHE_COMPETITIONS',
+  );
 
   Future<List<dynamic>> fetchCompetitions() async {
     try {
@@ -463,130 +571,121 @@ class ApiService {
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchCompetitions', e);
       return [];
     }
   }
 
   Future<bool> addCompetition(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse('$baseUrl/competitions'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addCompetition', e);
       return false;
     }
   }
 
   Future<bool> updateCompetition(String id, Map<String, dynamic> data) async {
     try {
-      final response = await http.put(
+      await http.put(
         Uri.parse('$baseUrl/competitions/$id'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('updateCompetition', e);
       return false;
     }
   }
 
   Future<bool> deleteCompetition(String id) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/competitions/$id'),
-      );
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/competitions/$id'));
+      return true;
     } catch (e) {
-      _logError('deleteCompetition', e);
       return false;
     }
   }
 
-  Stream<List<dynamic>> streamCompetitionEntries(String competitionId) =>
-      _createPollingStream(
-        () => fetchCompetitionEntries(competitionId),
-      ).asBroadcastStream();
-
-  Future<List<dynamic>> fetchCompetitionEntries(String competitionId) async {
+  Stream<List<dynamic>> streamCompetitionEntries(String id) =>
+      _createSmartStream(
+        fetcher: () => fetchCompetitionEntries(id),
+        cacheKey: 'CACHE_COMP_ENTRIES_$id',
+      );
+  Future<List<dynamic>> fetchCompetitionEntries(String id) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/competition_entries?competitionId=$competitionId'),
+        Uri.parse('$baseUrl/competition_entries?competitionId=$id'),
       );
       if (response.statusCode == 200)
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchCompetitionEntries', e);
       return [];
     }
   }
 
-  Future<bool> addCompetitionEntry(Map<String, dynamic> entryData) async {
+  Future<bool> addCompetitionEntry(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse('$baseUrl/competition_entries'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(entryData),
+        body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addCompetitionEntry', e);
       return false;
     }
   }
 
   // --- Schedule ---
   Stream<List<dynamic>> streamSchedule({required String traineeId}) =>
-      _createPollingStream(() => fetchSchedule(traineeId)).asBroadcastStream();
-
-  Future<List<dynamic>> fetchSchedule(String traineeId) async {
+      _createSmartStream(
+        fetcher: () => fetchSchedule(traineeId),
+        cacheKey: 'CACHE_SCHEDULE_$traineeId',
+      );
+  Future<List<dynamic>> fetchSchedule(String id) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/schedule?traineeId=$traineeId'),
+        Uri.parse('$baseUrl/schedule?traineeId=$id'),
       );
       if (response.statusCode == 200)
         return List<dynamic>.from(json.decode(response.body));
       return [];
     } catch (e) {
-      _logError('fetchSchedule', e);
       return [];
     }
   }
 
-  Future<bool> addScheduleEvent(Map<String, dynamic> eventData) async {
+  Future<bool> addScheduleEvent(Map<String, dynamic> data) async {
     try {
-      if (eventData['startTime'] != null)
-        eventData['startTime'] = eventData['startTime'].toIso8601String();
-      if (eventData['endTime'] != null)
-        eventData['endTime'] = eventData['endTime'].toIso8601String();
-      final response = await http.post(
+      if (data['startTime'] != null)
+        data['startTime'] = data['startTime'].toIso8601String();
+      if (data['endTime'] != null)
+        data['endTime'] = data['endTime'].toIso8601String();
+      await http.post(
         Uri.parse('$baseUrl/schedule'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(eventData),
+        body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
-      _logError('addScheduleEvent', e);
       return false;
     }
   }
 
-  // --- Favorites ---
-  Stream<List<dynamic>> streamUserFavorites(String trainerId) =>
-      _createPollingStream(
-        () => fetchUserFavorites(trainerId),
-      ).asBroadcastStream();
-
-  Future<List<dynamic>> fetchUserFavorites(String trainerId) async {
+  // --- Favorites & Progress ---
+  Stream<List<dynamic>> streamUserFavorites(String id) => _createSmartStream(
+    fetcher: () => fetchUserFavorites(id),
+    cacheKey: 'CACHE_FAVS_$id',
+  );
+  Future<List<dynamic>> fetchUserFavorites(String id) async {
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/user_favorites?trainerId=$trainerId'),
+        Uri.parse('$baseUrl/user_favorites?trainerId=$id'),
       );
       if (res.statusCode == 200)
         return List<dynamic>.from(json.decode(res.body));
@@ -603,30 +702,29 @@ class ApiService {
     String? docId,
   }) async {
     try {
-      if (isFavorite && docId != null) {
+      if (isFavorite && docId != null)
         await http.delete(Uri.parse('$baseUrl/user_favorites/$docId'));
-      } else {
+      else
         await http.post(
           Uri.parse('$baseUrl/user_favorites'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({'trainerId': trainerId, 'trainingId': trainingId}),
         );
-      }
       return true;
     } catch (e) {
       return false;
     }
   }
 
-  Stream<List<dynamic>> streamUserFavoriteCompetitions(String trainerId) =>
-      _createPollingStream(
-        () => fetchUserFavoriteCompetitions(trainerId),
-      ).asBroadcastStream();
-
-  Future<List<dynamic>> fetchUserFavoriteCompetitions(String trainerId) async {
+  Stream<List<dynamic>> streamUserFavoriteCompetitions(String id) =>
+      _createSmartStream(
+        fetcher: () => fetchUserFavoriteCompetitions(id),
+        cacheKey: 'CACHE_FAV_COMPS_$id',
+      );
+  Future<List<dynamic>> fetchUserFavoriteCompetitions(String id) async {
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/user_favorite_competitions?trainerId=$trainerId'),
+        Uri.parse('$baseUrl/user_favorite_competitions?trainerId=$id'),
       );
       if (res.statusCode == 200)
         return List<dynamic>.from(json.decode(res.body));
@@ -636,21 +734,15 @@ class ApiService {
     }
   }
 
-  // --- Progress ---
-  Stream<List<dynamic>> streamStepProgress(String userId, String trainingId) =>
-      _createPollingStream(
-        () => fetchStepProgress(userId, trainingId),
-      ).asBroadcastStream();
-
-  Future<List<dynamic>> fetchStepProgress(
-    String userId,
-    String trainingId,
-  ) async {
+  Stream<List<dynamic>> streamStepProgress(String uid, String tid) =>
+      _createSmartStream(
+        fetcher: () => fetchStepProgress(uid, tid),
+        cacheKey: 'CACHE_STEP_$uid\_$tid',
+      );
+  Future<List<dynamic>> fetchStepProgress(String uid, String tid) async {
     try {
       final res = await http.get(
-        Uri.parse(
-          '$baseUrl/step_progress?userId=$userId&trainingId=$trainingId',
-        ),
+        Uri.parse('$baseUrl/step_progress?userId=$uid&trainingId=$tid'),
       );
       if (res.statusCode == 200)
         return List<dynamic>.from(json.decode(res.body));
@@ -661,82 +753,41 @@ class ApiService {
   }
 
   Future<bool> setStepProgress(
-    String userId,
-    String trainingId,
-    String stepId,
+    String uid,
+    String tid,
+    String sid,
     bool isCompleted,
   ) async {
     try {
-      if (isCompleted) {
+      if (isCompleted)
         await http.post(
           Uri.parse('$baseUrl/step_progress'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'userId': userId,
-            'trainingId': trainingId,
-            'stepId': stepId,
+            'userId': uid,
+            'trainingId': tid,
+            'stepId': sid,
             'completedAt': DateTime.now().toIso8601String(),
           }),
         );
-      } else {
+      else
         await http.delete(
           Uri.parse('$baseUrl/step_progress'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'userId': userId,
-            'trainingId': trainingId,
-            'stepId': stepId,
-          }),
+          body: json.encode({'userId': uid, 'trainingId': tid, 'stepId': sid}),
         );
-      }
       return true;
     } catch (e) {
       return false;
     }
   }
 
-  // --- Misc ---
-  Stream<Map<String, dynamic>> streamAppConfig() =>
-      _createPollingStream(fetchAppConfig).asBroadcastStream();
-
-  Future<Map<String, dynamic>> fetchAppConfig() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/app_config'));
-      if (response.statusCode == 200) return json.decode(response.body);
-      return {'isEnabled': true, 'forceUpdate': false};
-    } catch (e) {
-      return {'isEnabled': true, 'forceUpdate': false};
-    }
-  }
-
-  Future<bool> updateAppConfig(Map<String, dynamic> config) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/app_config'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(config),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<Map<String, dynamic>?> fetchUser(String uid) async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/users/$uid'));
-      if (response.statusCode == 200) return json.decode(response.body);
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
+  // --- Org & Config ---
   Future<List<dynamic>> fetchOrgNodes() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/org_nodes'));
-      if (response.statusCode == 200)
-        return List<dynamic>.from(json.decode(response.body));
+      final res = await http.get(Uri.parse('$baseUrl/org_nodes'));
+      if (res.statusCode == 200)
+        return List<dynamic>.from(json.decode(res.body));
       return [];
     } catch (e) {
       return [];
@@ -745,12 +796,12 @@ class ApiService {
 
   Future<bool> addOrgNode(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse('$baseUrl/org_nodes'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
       return false;
     }
@@ -758,12 +809,12 @@ class ApiService {
 
   Future<bool> updateOrgNode(String id, Map<String, dynamic> data) async {
     try {
-      final response = await http.put(
+      await http.put(
         Uri.parse('$baseUrl/org_nodes/$id'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
       return false;
     }
@@ -771,8 +822,53 @@ class ApiService {
 
   Future<bool> deleteOrgNode(String id) async {
     try {
-      final response = await http.delete(Uri.parse('$baseUrl/org_nodes/$id'));
-      return response.statusCode == 200;
+      await http.delete(Uri.parse('$baseUrl/org_nodes/$id'));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Stream<Map<String, dynamic>> streamAppConfig() => Stream.periodic(
+    pollingInterval,
+  ).asyncMap((_) => fetchAppConfig()).asBroadcastStream();
+  Future<Map<String, dynamic>> fetchAppConfig() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/app_config'));
+      if (res.statusCode == 200) return json.decode(res.body);
+      return {'isEnabled': true, 'forceUpdate': false};
+    } catch (e) {
+      return {'isEnabled': true, 'forceUpdate': false};
+    }
+  }
+
+  // --- AI Analysis ---
+  Future<String> analyzeNotes(List<String> notes) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/analyze_notes'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'notes': notes}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['summary'] ?? 'لا يوجد رد من الذكاء الاصطناعي.';
+      }
+      return 'فشل التحليل (خطأ ${response.statusCode})';
+    } catch (e) {
+      return 'حدث خطأ في الاتصال بالسيرفر.';
+    }
+  }
+
+  Future<bool> updateAppConfig(Map<String, dynamic> data) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/app_config'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+      return true;
     } catch (e) {
       return false;
     }

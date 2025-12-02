@@ -34,12 +34,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadUserData() async {
     if (_currentUser != null) {
-      // استخدام ApiService لجلب البيانات
+      // استخدام ApiService لجلب البيانات بدلاً من Firestore المباشر
       final userData = await _apiService.fetchUser(_currentUser!.uid);
 
       if (mounted) {
         setState(() {
-          // إذا لم نجد بيانات، نستخدم بيانات المستخدم الافتراضية
+          // إذا عادت البيانات، نستخدمها. وإلا نستخدم البيانات المخزنة في Auth كاحتياط
           _nameController.text =
               userData?['displayName'] ?? _currentUser!.displayName ?? '';
           _photoUrl = userData?['photoUrl'] ?? _currentUser!.photoURL;
@@ -63,6 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final imageBytes = await pickedFile.readAsBytes();
 
+    if (!mounted) return;
     final Uint8List? croppedBytes = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -100,6 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final String fileName =
             'profile_pic_${_currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}';
 
+        // 1. رفع الصورة إلى Cloudinary (هذا يعمل لأنه Client-Side HTTP)
         final CloudinaryResponse response = await cloudinary.uploadFile(
           CloudinaryFile.fromBytesData(
             croppedBytes,
@@ -110,13 +112,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         final photoUrl = response.secureUrl;
 
-        // تحديث عبر ApiService
+        // 2. تحديث الرابط في قاعدة البيانات عبر السيرفر الوسيط (هام جداً)
         await _apiService.updateUser({
           'uid': _currentUser!.uid,
           'photoUrl': photoUrl,
         });
 
-        // تحديث البروفايل المحلي في Firebase Auth (للتوافق)
+        // 3. تحديث البروفايل المحلي في Firebase Auth (للتوافق)
         await _currentUser!.updatePhotoURL(photoUrl);
 
         if (mounted) {
@@ -132,7 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _saveProfile() async {
     if (_nameController.text.isNotEmpty) {
-      // تحديث عبر ApiService
+      // تحديث عبر ApiService بدلاً من Firestore
       await _apiService.updateUser({
         'uid': _currentUser!.uid,
         'displayName': _nameController.text,
@@ -152,7 +154,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     if (!mounted) return;
+
+    // مسح الكاش والبيانات من الخدمة
+    await _apiService.logout();
     await FirebaseAuth.instance.signOut();
+
     if (mounted) {
       Navigator.of(
         context,
@@ -162,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    l10n = AppLocalizations.of(context)!; // تأكد من تهيئة l10n
+    l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.editProfile)),
       body: _isLoading

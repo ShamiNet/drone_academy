@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart'; // هام جداً
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/edit_training_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
@@ -23,6 +24,7 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
       backgroundColor: bgColor,
       body: Column(
         children: [
+          // شريط البحث
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -41,21 +43,25 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
+
+          // القائمة
           Expanded(
             child: StreamBuilder<List<dynamic>>(
-              stream: _apiService.streamTrainings(), // استخدام السيرفر
+              stream: _apiService.streamTrainings(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 final docs = snapshot.data ?? [];
-                if (docs.isEmpty)
+                if (docs.isEmpty) {
                   return Center(
                     child: Text(
                       l10n.noTrainingsAvailable,
                       style: const TextStyle(color: Colors.grey),
                     ),
                   );
+                }
 
                 final filtered = docs
                     .where(
@@ -105,11 +111,57 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
                             ),
                           ),
                           children: grouped[level]!.map((doc) {
+                            // --- هنا التعديل لإظهار الصورة ---
+                            final String? imageUrl = doc['imageUrl'];
+                            final bool hasImage =
+                                imageUrl != null && imageUrl.isNotEmpty;
+
                             return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              // عرض الصورة على اليمين (Leading)
+                              leading: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: SizedBox(
+                                  width: 50,
+                                  height: 50,
+                                  child: hasImage
+                                      ? CachedNetworkImage(
+                                          imageUrl: imageUrl!,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              ),
+                                          errorWidget: (context, url, error) =>
+                                              const Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey,
+                                              ),
+                                        )
+                                      : Container(
+                                          color: Colors.grey.shade800,
+                                          child: const Icon(
+                                            Icons.flight,
+                                            color: Colors.white54,
+                                          ), // أيقونة بديلة
+                                        ),
+                                ),
+                              ),
+
                               title: Text(
                                 doc['title'] ?? '',
-                                style: const TextStyle(color: Colors.white),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
+
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -118,7 +170,6 @@ class _ManageTrainingsTabState extends State<ManageTrainingsTab> {
                                       Icons.edit,
                                       color: Colors.blue,
                                     ),
-                                    // ملاحظة: EditTrainingScreen تم تحديثه مسبقاً ليقبل Map
                                     onPressed: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(

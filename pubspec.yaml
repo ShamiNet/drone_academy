@@ -61,6 +61,7 @@ dependencies:
   permission_handler: ^12.0.1
   cropperx: ^1.1.1
   share_plus: ^12.0.1
+  shared_preferences: ^2.2.2
   # pdfx: ^2.9.0
 
 

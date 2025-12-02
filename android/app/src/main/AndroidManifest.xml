@@ -21,7 +21,7 @@
     <application
         android:requestLegacyExternalStorage="true"
         android:enableOnBackInvokedCallback="true"
-        android:label="drone_academy"
+        android:label="أكاديمية الدرون"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity
