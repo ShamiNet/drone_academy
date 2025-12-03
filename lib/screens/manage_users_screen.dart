@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/add_user_screen.dart';
-import 'package:drone_academy/screens/trainee_profile_screen.dart'; // <-- استيراد هام جداً
+import 'package:drone_academy/screens/trainee_profile_screen.dart';
+import 'package:drone_academy/screens/user_details_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:drone_academy/widgets/empty_state_widget.dart';
 import 'package:flutter/material.dart';
 
@@ -17,20 +19,100 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   final ApiService _apiService = ApiService();
 
   String _searchQuery = '';
-  String _selectedRoleFilter = 'trainee';
+  String _selectedRoleFilter = 'All';
   String _selectedManagerFilter = 'All';
-  int _selectedTab = 0;
+
+  final Color _bgColor = const Color(0xFF111318);
+  final Color _cardColor = const Color(0xFF1E2230);
+  final Color _orangeColor = const Color(0xFFFF9800);
+
+  // ترتيب الرتب للعرض
+  int _getRoleOrder(String role) {
+    switch (role.toLowerCase()) {
+      case 'owner':
+        return 1;
+      case 'admin':
+        return 2;
+      case 'trainer':
+        return 3;
+      case 'trainee':
+        return 4;
+      default:
+        return 5;
+    }
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role.toLowerCase()) {
+      case 'owner':
+        return const Color(0xFFFFD700); // ذهبي
+      case 'admin':
+        return const Color(0xFFFF5252); // أحمر
+      case 'trainer':
+        return const Color(0xFF448AFF); // أزرق
+      case 'trainee':
+        return const Color(0xFF69F0AE); // أخضر
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role.toLowerCase()) {
+      case 'owner':
+        return Icons.workspace_premium;
+      case 'admin':
+        return Icons.security;
+      case 'trainer':
+        return Icons.school;
+      case 'trainee':
+        return Icons.person;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  // دالة التسميات الجديدة حسب طلبك
+  String _getRoleLabel(String role) {
+    switch (role.toLowerCase()) {
+      case 'owner':
+        return 'المدير العام';
+      case 'admin':
+        return 'المدراء';
+      case 'trainer':
+        return 'المدربين';
+      case 'trainee':
+        return 'المتدربين';
+      default:
+        return role;
+    }
+  }
+
+  void _navigateToUserProfile(Map<String, dynamic> user) {
+    final role = (user['role'] ?? 'trainee').toString().toLowerCase();
+    if (role == 'trainee') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TraineeProfileScreen(traineeData: user),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserDetailsScreen(userData: user),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    const bgColor = Color(0xFF111318);
-    const cardColor = Color(0xFF1E2230);
-    const orangeColor = Color(0xFFFF9800);
-
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: _bgColor,
       body: StreamBuilder<List<dynamic>>(
         stream: _apiService.streamUsers(),
         builder: (context, snapshot) {
@@ -40,65 +122,58 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
           final allUsers = snapshot.data ?? [];
 
+          // قائمة المدراء للفلتر
           final managers = allUsers.where((u) {
-            final r = u['role'] ?? '';
-            return r == 'admin' || r == 'trainer';
+            final r = (u['role'] ?? '').toString().toLowerCase();
+            return r == 'owner' || r == 'admin' || r == 'trainer';
           }).toList();
 
+          // الفلترة
           final filteredUsers = allUsers.where((user) {
             final name = (user['displayName'] ?? '').toString().toLowerCase();
             final email = (user['email'] ?? '').toString().toLowerCase();
-            final role = user['role'] ?? 'trainee';
+            final role = (user['role'] ?? 'trainee').toString().toLowerCase();
             final parentId = user['parentId'] ?? '';
-            final isBlocked = user['isBlocked'] ?? false;
 
-            if (_searchQuery.isNotEmpty &&
-                !name.contains(_searchQuery.toLowerCase()) &&
-                !email.contains(_searchQuery.toLowerCase())) {
-              return false;
-            }
+            bool matchesSearch =
+                name.contains(_searchQuery.toLowerCase()) ||
+                email.contains(_searchQuery.toLowerCase());
+            bool matchesRole =
+                _selectedRoleFilter == 'All' ||
+                role == _selectedRoleFilter.toLowerCase();
+            bool matchesManager =
+                _selectedManagerFilter == 'All' ||
+                parentId == _selectedManagerFilter;
 
-            if (_selectedRoleFilter != 'All' && role != _selectedRoleFilter) {
-              return false;
-            }
-
-            if (_selectedManagerFilter != 'All' &&
-                parentId != _selectedManagerFilter) {
-              return false;
-            }
-
-            if (_selectedTab == 1 && !isBlocked) return false;
-
-            return true;
+            return matchesSearch && matchesRole && matchesManager;
           }).toList();
+
+          // الترتيب التلقائي
+          filteredUsers.sort((a, b) {
+            int orderA = _getRoleOrder(a['role'] ?? '');
+            int orderB = _getRoleOrder(b['role'] ?? '');
+            return orderA.compareTo(orderB);
+          });
 
           return Column(
             children: [
+              // --- قسم البحث والفلترة ---
               Container(
                 padding: const EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
+                color: _bgColor,
                 child: Column(
                   children: [
                     TextField(
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'ابحث عن مستخدم...',
+                        hintText: 'بحث عن مستخدم...',
                         hintStyle: const TextStyle(color: Colors.grey),
                         prefixIcon: const Icon(
                           Icons.search,
                           color: Colors.grey,
                         ),
                         filled: true,
-                        fillColor: cardColor,
+                        fillColor: _cardColor,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -109,57 +184,66 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    _buildDropdownFilter(
-                      value: _selectedRoleFilter,
-                      label: 'الدور',
-                      items: [
-                        const DropdownMenuItem(
-                          value: 'All',
-                          child: Text('جميع الأدوار'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'admin',
-                          child: Text(l10n.admin),
-                        ),
-                        DropdownMenuItem(
-                          value: 'trainer',
-                          child: Text(l10n.trainer),
-                        ),
-                        DropdownMenuItem(
-                          value: 'trainee',
-                          child: Text(l10n.trainees),
-                        ),
-                      ],
-                      onChanged: (val) =>
-                          setState(() => _selectedRoleFilter = val!),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    if (_selectedRoleFilter == 'trainee' ||
-                        _selectedRoleFilter == 'All')
-                      _buildDropdownFilter(
-                        value: _selectedManagerFilter,
-                        label: l10n.filterByManager,
-                        items: [
-                          DropdownMenuItem(
-                            value: 'All',
-                            child: Text(l10n.allManagers),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDropdownFilter(
+                            value: _selectedRoleFilter,
+                            label: 'الدور',
+                            items: [
+                              const DropdownMenuItem(
+                                value: 'All',
+                                child: Text('الكل'),
+                              ),
+                              const DropdownMenuItem(
+                                value: 'admin',
+                                child: Text('المدراء'),
+                              ),
+                              const DropdownMenuItem(
+                                value: 'trainer',
+                                child: Text('المدربين'),
+                              ),
+                              const DropdownMenuItem(
+                                value: 'trainee',
+                                child: Text('المتدربين'),
+                              ),
+                            ],
+                            onChanged: (val) =>
+                                setState(() => _selectedRoleFilter = val!),
                           ),
-                          ...managers.map(
-                            (m) => DropdownMenuItem(
-                              value: m['id'] ?? m['uid'],
-                              child: Text(m['displayName'] ?? 'Unknown'),
+                        ),
+                        const SizedBox(width: 8),
+                        if (_selectedRoleFilter == 'trainee' ||
+                            _selectedRoleFilter == 'All')
+                          Expanded(
+                            child: _buildDropdownFilter(
+                              value: _selectedManagerFilter,
+                              label: l10n.filterByManager,
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'All',
+                                  child: Text(l10n.allManagers),
+                                ),
+                                ...managers.map(
+                                  (m) => DropdownMenuItem(
+                                    value: m['id'] ?? m['uid'],
+                                    child: Text(
+                                      m['displayName'] ?? 'Unknown',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (val) =>
+                                  setState(() => _selectedManagerFilter = val!),
                             ),
                           ),
-                        ],
-                        onChanged: (val) =>
-                            setState(() => _selectedManagerFilter = val!),
-                      ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-
+              // --- القائمة ---
               Expanded(
                 child: filteredUsers.isEmpty
                     ? Center(
@@ -173,151 +257,126 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         itemCount: filteredUsers.length,
                         itemBuilder: (context, index) {
                           final user = filteredUsers[index];
-                          final isBlocked = user['isBlocked'] ?? false;
-                          final userId = user['id'] ?? user['uid'];
+                          final isBlocked = user['isBlocked'] == true;
+                          final String role = user['role'] ?? 'trainee';
+                          final String photoUrl = user['photoUrl'] ?? '';
+                          final Color roleColor = _getRoleColor(role);
 
-                          // دالة الانتقال لبروفايل المتدرب
-                          void openTraineeProfile() {
-                            // نمرر بيانات المستخدم (Map) مباشرة إلى الشاشة
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    TraineeProfileScreen(traineeData: user),
-                              ),
-                            );
-                          }
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: cardColor,
+                          return Card(
+                            color: _cardColor,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
+                              side: isBlocked
+                                  ? const BorderSide(
+                                      color: Colors.red,
+                                      width: 1,
+                                    )
+                                  : BorderSide.none,
                             ),
-                            child: Row(
-                              children: [
-                                // 1. أزرار التحكم (حذف وتعديل) - يسار
-                                Column(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        color: Colors.red,
-                                        size: 20,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              leading: Stack(
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: roleColor,
+                                        width: 2,
                                       ),
-                                      onPressed: () => _showDeleteDialog(
-                                        userId,
-                                        user['displayName'],
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
                                     ),
-                                    const SizedBox(height: 16),
-                                    // زر التعديل/العرض
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.visibility,
-                                        color: Colors.blue,
-                                        size: 20,
+                                    child: CircleAvatar(
+                                      radius: 28,
+                                      backgroundColor: Colors.grey.shade800,
+                                      backgroundImage: (photoUrl.isNotEmpty)
+                                          ? CachedNetworkImageProvider(photoUrl)
+                                          : null,
+                                      child: (photoUrl.isEmpty)
+                                          ? const Icon(
+                                              Icons.person,
+                                              color: Colors.white,
+                                              size: 28,
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  if (isBlocked)
+                                    Positioned(
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.red,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.block,
+                                          size: 12,
+                                          color: Colors.white,
+                                        ),
                                       ),
-                                      onPressed:
-                                          openTraineeProfile, // النقر يفتح البروفايل
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
+                                    ),
+                                ],
+                              ),
+                              title: Text(
+                                user['displayName'] ?? 'No Name',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user['email'] ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: roleColor.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: roleColor.withOpacity(0.5),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _getRoleIcon(role),
+                                      color: roleColor,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _getRoleLabel(role),
+                                      style: TextStyle(
+                                        color: roleColor,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(width: 12),
-
-                                // 2. المعلومات (وسط) - جعلها قابلة للنقر أيضاً
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap:
-                                        openTraineeProfile, // النقر يفتح البروفايل
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          user['displayName'] ?? 'No Name',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                          textAlign: TextAlign.right,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          user['email'] ?? '',
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 12,
-                                          ),
-                                          textAlign: TextAlign.right,
-                                        ),
-                                        if (isBlocked)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 4.0,
-                                            ),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.red.withOpacity(
-                                                  0.2,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: Colors.red,
-                                                ),
-                                              ),
-                                              child: const Text(
-                                                'محظور',
-                                                style: TextStyle(
-                                                  color: Colors.red,
-                                                  fontSize: 10,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-
-                                // 3. الصورة (يمين) - النقر عليها يفتح البروفايل
-                                GestureDetector(
-                                  onTap: openTraineeProfile,
-                                  child: CircleAvatar(
-                                    radius: 26,
-                                    backgroundColor: Colors.blue.shade700,
-                                    backgroundImage:
-                                        (user['photoUrl'] != null &&
-                                            user['photoUrl'] != '')
-                                        ? CachedNetworkImageProvider(
-                                            user['photoUrl'],
-                                          )
-                                        : null,
-                                    child:
-                                        (user['photoUrl'] == null ||
-                                            user['photoUrl'] == '')
-                                        ? const Icon(
-                                            Icons.person,
-                                            color: Colors.white,
-                                            size: 28,
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              ],
+                              ),
+                              onTap: () => _navigateToUserProfile(user),
+                              onLongPress: () =>
+                                  _showUserOptions(context, user, allUsers),
                             ),
                           );
                         },
@@ -327,17 +386,366 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           );
         },
       ),
-
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const AddUserScreen()),
         ),
-        backgroundColor: orangeColor,
+        backgroundColor: _orangeColor,
         child: const Icon(Icons.add, color: Colors.black),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
+  }
+
+  void _showUserOptions(
+    BuildContext context,
+    Map<String, dynamic> user,
+    List<dynamic> allUsers,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final bool isBlocked = user['isBlocked'] == true;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                user['displayName'] ?? 'User',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Divider(color: Colors.grey),
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.blue),
+                title: Text(
+                  l10n.edit,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showEditUserDialog(user, allUsers);
+                },
+              ),
+              if (user['role'] != 'owner')
+                ListTile(
+                  leading: Icon(
+                    isBlocked ? Icons.check_circle : Icons.block,
+                    color: isBlocked ? Colors.green : Colors.orange,
+                  ),
+                  title: Text(
+                    isBlocked ? l10n.unblockUser : l10n.blockUser,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleBlockStatus(user, !isBlocked);
+                  },
+                ),
+              if (user['role'] != 'owner')
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: Text(
+                    l10n.delete,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showDeleteDialog(
+                      user['id'] ?? user['uid'],
+                      user['displayName'],
+                      l10n,
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEditUserDialog(Map<String, dynamic> user, List<dynamic> allUsers) {
+    String currentRole = user['role'] ?? 'trainee';
+    String? currentParentId = user['parentId'];
+    final userId = user['id'] ?? user['uid'];
+
+    if (currentParentId != null && currentParentId.isEmpty) {
+      currentParentId = null;
+    }
+
+    // اسم المدير الحالي للعرض الأولي
+    String currentParentName = 'بدون مدرب';
+    if (currentParentId != null) {
+      final parent = allUsers.firstWhere(
+        (u) => (u['id'] ?? u['uid']) == currentParentId,
+        orElse: () => null,
+      );
+      if (parent != null) {
+        currentParentName = parent['displayName'];
+      } else {
+        currentParentId = null; // إذا كان المدير المحفوظ غير موجود
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E2230),
+              title: const Text(
+                "تعديل المستخدم",
+                style: TextStyle(color: Colors.white),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "الدور:",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  DropdownButton<String>(
+                    value: currentRole,
+                    isExpanded: true,
+                    dropdownColor: const Color(0xFF2C2C2C),
+                    style: const TextStyle(color: Colors.white),
+                    underline: Container(height: 1, color: Colors.grey),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'admin',
+                        child: Text('المدراء'),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'trainer',
+                        child: Text('المدربين'),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'trainee',
+                        child: Text('المتدربين'),
+                      ),
+                    ],
+                    onChanged: (val) =>
+                        setDialogState(() => currentRole = val!),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Text(
+                    "المدرب المسؤول (التبعية):",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+
+                  InkWell(
+                    onTap: () async {
+                      final result = await _showSelectParentDialog(
+                        allUsers,
+                        userId,
+                      );
+                      if (result != null) {
+                        setDialogState(() {
+                          currentParentId = result['id'];
+                          currentParentName = result['name'];
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            currentParentName,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    "إلغاء",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await _apiService.updateUser({
+                      'uid': userId,
+                      'role': currentRole,
+                      'parentId': currentParentId ?? '',
+                    });
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      showCustomSnackBar(
+                        context,
+                        "تم تحديث البيانات بنجاح",
+                        isError: false,
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                  child: const Text("حفظ"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> _showSelectParentDialog(
+    List<dynamic> allUsers,
+    String currentUserId,
+  ) async {
+    final potentialParents = allUsers
+        .where((u) => (u['id'] ?? u['uid']) != currentUserId)
+        .toList();
+    potentialParents.sort(
+      (a, b) => _getRoleOrder(
+        a['role'] ?? '',
+      ).compareTo(_getRoleOrder(b['role'] ?? '')),
+    );
+    TextEditingController searchCtrl = TextEditingController();
+
+    return await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = potentialParents.where((u) {
+              final name = (u['displayName'] ?? '').toString().toLowerCase();
+              return name.contains(searchCtrl.text.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E2230),
+              title: const Text(
+                "اختر المسؤول",
+                style: TextStyle(color: Colors.white),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 400,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: searchCtrl,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        hintText: "بحث...",
+                        hintStyle: TextStyle(color: Colors.grey),
+                        prefixIcon: Icon(Icons.search, color: Colors.grey),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                      ),
+                      onChanged: (v) => setModalState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.grey,
+                        child: Icon(Icons.highlight_off, color: Colors.white),
+                      ),
+                      title: const Text(
+                        "بدون مدرب (مستوى أعلى)",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(context, {
+                        'id': null,
+                        'name': 'بدون مدرب',
+                      }),
+                    ),
+                    const Divider(color: Colors.grey),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final user = filtered[index];
+                          final role = user['role'] ?? 'trainee';
+                          final color = _getRoleColor(role);
+
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: color.withOpacity(0.2),
+                              child: Icon(
+                                _getRoleIcon(role),
+                                color: color,
+                                size: 20,
+                              ),
+                            ),
+                            title: Text(
+                              user['displayName'] ?? 'Unknown',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            subtitle: Text(
+                              _getRoleLabel(role),
+                              style: TextStyle(color: color, fontSize: 10),
+                            ),
+                            onTap: () => Navigator.pop(context, {
+                              'id': user['id'] ?? user['uid'],
+                              'name': user['displayName'],
+                            }),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _toggleBlockStatus(Map<String, dynamic> user, bool shouldBlock) async {
+    final success = await _apiService.updateUser({
+      'uid': user['id'] ?? user['uid'],
+      'isBlocked': shouldBlock,
+    });
+    if (mounted) {
+      showCustomSnackBar(
+        context,
+        success
+            ? (shouldBlock ? 'تم حظر المستخدم' : 'تم تفعيل المستخدم')
+            : 'فشل العملية',
+        isError: !success || shouldBlock,
+      );
+    }
   }
 
   Widget _buildDropdownFilter({
@@ -349,9 +757,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2230),
+        color: _cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF3F51B5), width: 1),
+        border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -359,53 +767,46 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           items: items,
           onChanged: onChanged,
           isExpanded: true,
-          dropdownColor: const Color(0xFF1E2230),
+          dropdownColor: _cardColor,
           style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'),
           icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-          selectedItemBuilder: (context) {
-            return items.map((item) {
-              return Align(
-                alignment: Alignment.centerRight,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(color: Colors.grey, fontSize: 10),
-                    ),
-                    item.child,
-                  ],
-                ),
-              );
-            }).toList();
-          },
         ),
       ),
     );
   }
 
-  void _showDeleteDialog(String userId, String? userName) {
+  void _showDeleteDialog(
+    String userId,
+    String? userName,
+    AppLocalizations l10n,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E2230),
-        title: const Text("تأكيد الحذف", style: TextStyle(color: Colors.white)),
+        backgroundColor: _cardColor,
+        title: Text(
+          l10n.confirmDeletion,
+          style: const TextStyle(color: Colors.white),
+        ),
         content: Text(
-          "هل أنت متأكد من حذف ${userName ?? 'المستخدم'}؟",
+          "${l10n.areYouSureDelete} ($userName)؟",
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
+            child: Text(
+              l10n.cancel,
+              style: const TextStyle(color: Colors.grey),
+            ),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               await _apiService.deleteUser(userId);
               if (mounted) Navigator.pop(ctx);
             },
-            child: const Text("حذف", style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(l10n.delete),
           ),
         ],
       ),

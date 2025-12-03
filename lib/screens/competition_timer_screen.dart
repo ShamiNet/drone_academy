@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:drone_academy/services/api_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class CompetitionTimerScreen extends StatefulWidget {

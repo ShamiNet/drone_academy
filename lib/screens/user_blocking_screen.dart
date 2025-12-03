@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drone_academy/services/api_service.dart'; // استخدام الخدمة الجديدة
 import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
 
@@ -11,47 +11,68 @@ class UserBlockingScreen extends StatefulWidget {
 }
 
 class _UserBlockingScreenState extends State<UserBlockingScreen> {
-  // 0: الكل (أو المستخدمون)، 1: محظورون، 2: نشطون
+  final ApiService _apiService = ApiService();
+  // 0: الكل، 1: محظورون، 2: نشطون
   int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     const bgColor = Color(0xFF111318);
+    const cardColor = Color(0xFF1E2230);
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: const Text('المستخدمون'),
+        title: const Text('إدارة حظر المستخدمين'),
         backgroundColor: bgColor,
         elevation: 0,
         actions: [
-          // عداد المحظورين (ديكور من الصورة)
-          Container(
-            margin: const EdgeInsets.only(left: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2C2C2C),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.red.withOpacity(0.5)),
-            ),
-            child: Row(
-              children: const [
-                Text('1', style: TextStyle(color: Colors.red)), // مثال رقمي
-                SizedBox(width: 4),
-                Icon(Icons.block, color: Colors.red, size: 16),
-              ],
-            ),
+          // --- العداد الديناميكي (تم تفعيله) ---
+          StreamBuilder<List<dynamic>>(
+            stream: _apiService.streamUsers(), // الاستماع للتحديثات
+            builder: (context, snapshot) {
+              final users = snapshot.data ?? [];
+              final blockedCount = users
+                  .where((u) => u['isBlocked'] == true)
+                  .length;
+
+              return Container(
+                margin: const EdgeInsets.only(left: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2C),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.red.withOpacity(0.5)),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      '$blockedCount',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.block, color: Colors.red, size: 16),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
       body: Column(
         children: [
-          // --- التبويبات العلوية (Chips) ---
+          // --- التبويبات العلوية ---
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
-                _buildFilterChip('المستخدمون', Icons.group, 0),
+                _buildFilterChip('الكل', Icons.group, 0),
                 const SizedBox(width: 8),
                 _buildFilterChip('محظورون', Icons.block, 1),
                 const SizedBox(width: 8),
@@ -62,34 +83,41 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
 
           // --- القائمة ---
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .orderBy('displayName')
-                  .snapshots(),
+            child: StreamBuilder<List<dynamic>>(
+              stream: _apiService
+                  .streamUsers(), // استخدام السيرفر بدلاً من فايربيز
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
-                final allDocs = snapshot.data!.docs;
+                final allUsers = snapshot.data ?? [];
 
-                // التصفية
-                final filteredDocs = allDocs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final bool isBlocked = data['isBlocked'] == true;
+                // التصفية حسب التبويب المختار
+                final filteredUsers = allUsers.where((user) {
+                  final bool isBlocked = user['isBlocked'] == true;
 
                   if (_selectedIndex == 1) return isBlocked; // محظورون فقط
                   if (_selectedIndex == 2) return !isBlocked; // نشطون فقط
                   return true; // الكل
                 }).toList();
 
+                if (filteredUsers.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "لا يوجد مستخدمين",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
+                }
+
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: filteredDocs.length,
+                  itemCount: filteredUsers.length,
                   itemBuilder: (context, index) {
-                    final user = filteredDocs[index];
-                    final data = user.data() as Map<String, dynamic>;
-                    final bool isBlocked = data['isBlocked'] == true;
+                    final user = filteredUsers[index];
+                    final bool isBlocked = user['isBlocked'] == true;
+                    final String photoUrl = user['photoUrl'] ?? '';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -98,21 +126,22 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
                         horizontal: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E2230),
+                        color: cardColor,
                         borderRadius: BorderRadius.circular(10),
+                        border: isBlocked
+                            ? Border.all(color: Colors.red.withOpacity(0.3))
+                            : null,
                       ),
                       child: Row(
                         children: [
                           // مفتاح التبديل (Switch)
                           Switch(
-                            value: !isBlocked, // On يعني نشط، Off يعني محظور
-                            activeColor: const Color(
-                              0xFFFF9800,
-                            ), // برتقالي عند التفعيل
+                            value: !isBlocked, // On = نشط، Off = محظور
+                            activeColor: const Color(0xFFFF9800),
                             inactiveThumbColor: Colors.grey,
                             inactiveTrackColor: Colors.grey.shade800,
                             onChanged: (val) {
-                              // عكس الحالة
+                              // عكس الحالة (إذا كان val=true يعني نريد التفعيل، إذن isBlocked يجب أن يصبح false)
                               _toggleBlockStatus(user, !val);
                             },
                           ),
@@ -123,7 +152,7 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                data['displayName'] ?? 'User',
+                                user['displayName'] ?? 'User',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -131,14 +160,14 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
                                 ),
                               ),
                               Text(
-                                data['email'] ?? '',
+                                user['email'] ?? '',
                                 style: const TextStyle(
                                   color: Colors.grey,
                                   fontSize: 12,
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              // شارة الدور أو الحالة
+                              // شارة الحالة
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
@@ -147,23 +176,22 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
                                 decoration: BoxDecoration(
                                   color: isBlocked
                                       ? Colors.red.withOpacity(0.2)
-                                      : Colors.grey.withOpacity(0.2),
+                                      : Colors.green.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
                                     color: isBlocked
                                         ? Colors.red
-                                        : Colors.grey.shade700,
+                                        : Colors.green,
                                   ),
                                 ),
                                 child: Text(
-                                  isBlocked
-                                      ? 'محظور'
-                                      : (data['role'] == 'trainee'
-                                            ? 'المتدربين'
-                                            : 'المدربين'),
+                                  isBlocked ? 'محظور' : 'نشط',
                                   style: TextStyle(
-                                    color: isBlocked ? Colors.red : Colors.grey,
+                                    color: isBlocked
+                                        ? Colors.red
+                                        : Colors.green,
                                     fontSize: 10,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
@@ -179,17 +207,11 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
                                   child: Icon(Icons.block, color: Colors.white),
                                 )
                               : CircleAvatar(
-                                  backgroundColor: Colors.blue,
-                                  backgroundImage:
-                                      (data['photoUrl'] != null &&
-                                          data['photoUrl'] != '')
-                                      ? CachedNetworkImageProvider(
-                                          data['photoUrl'],
-                                        )
+                                  backgroundColor: Colors.grey.shade800,
+                                  backgroundImage: (photoUrl.isNotEmpty)
+                                      ? CachedNetworkImageProvider(photoUrl)
                                       : null,
-                                  child:
-                                      (data['photoUrl'] == null ||
-                                          data['photoUrl'] == '')
+                                  child: (photoUrl.isEmpty)
                                       ? const Icon(
                                           Icons.person,
                                           color: Colors.white,
@@ -217,9 +239,7 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFF3F455A)
-                : Colors.transparent, // لون رمادي مزرق عند التحديد
+            color: isSelected ? const Color(0xFF3F455A) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isSelected ? Colors.transparent : Colors.grey.shade800,
@@ -236,8 +256,11 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
                 ),
               ),
               const SizedBox(width: 4),
-              if (isSelected) Icon(Icons.check, size: 16, color: Colors.white),
-              if (!isSelected) Icon(icon, size: 16, color: Colors.grey),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? Colors.white : Colors.grey,
+              ),
             ],
           ),
         ),
@@ -245,13 +268,24 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
     );
   }
 
-  void _toggleBlockStatus(DocumentSnapshot user, bool shouldBlock) {
-    user.reference.update({'isBlocked': shouldBlock}).then((_) {
-      showCustomSnackBar(
-        context,
-        shouldBlock ? 'تم حظر المستخدم' : 'تم تفعيل المستخدم',
-        isError: shouldBlock, // أحمر للحظر، أخضر للتفعيل
-      );
+  void _toggleBlockStatus(Map<String, dynamic> user, bool shouldBlock) async {
+    final uid = user['id'] ?? user['uid'];
+
+    final success = await _apiService.updateUser({
+      'uid': uid,
+      'isBlocked': shouldBlock,
     });
+
+    if (mounted) {
+      if (success) {
+        showCustomSnackBar(
+          context,
+          shouldBlock ? 'تم حظر المستخدم' : 'تم تفعيل المستخدم',
+          isError: shouldBlock,
+        );
+      } else {
+        showCustomSnackBar(context, 'فشل تحديث الحالة');
+      }
+    }
   }
 }

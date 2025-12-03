@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart'; // إضافة
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -14,8 +16,160 @@ class ApiService {
   static Map<String, dynamic>? currentUser;
   static const String _userKey = 'cached_user_data';
 
-  void _logError(String context, Object error) {
-    print("ApiService Error [$context]: $error");
+  // دالة مساعدة للطباعة
+  void _log(String tag, String message) {
+    print("🚀 [API][$tag] $message");
+  }
+
+  void _logError(String tag, String error) {
+    print("🔴 [API_ERROR][$tag] $error");
+  }
+
+  // دالة مساعدة للحصول على ID الجهاز
+  Future<String?> _getDeviceId() async {
+    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    try {
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        return androidInfo.id; // Unique ID on Android
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        return iosInfo.identifierForVendor; // Unique ID on iOS
+      }
+    } catch (e) {
+      print("Error getting device ID: $e");
+    }
+    return null;
+  }
+
+  // --- Auth ---
+  Future<bool> login(String email, String password) async {
+    _log("LOGIN", "Attempting login for: $email");
+    final deviceId = await _getDeviceId(); // الحصول على ID
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': email,
+          'password': password,
+          'deviceId': deviceId, // إرساله للسيرفر
+        }),
+      );
+
+      _log("LOGIN", "Response Code: ${response.statusCode}");
+      _log("LOGIN", "Response Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        currentUser = data;
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_userKey, json.encode(data));
+
+        _log("LOGIN", "Login Successful. User cached.");
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _logError("LOGIN", e.toString());
+      return false;
+    }
+  }
+
+  // --- إضافة دالة فحص الحظر عند البدء (لـ Splash Screen) ---
+  Future<Map<String, dynamic>> checkDeviceBan() async {
+    try {
+      final deviceId = await _getDeviceId();
+      if (deviceId == null) return {'isBanned': false};
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/check_device_ban'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'deviceId': deviceId}),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {'isBanned': false};
+  }
+
+  // --- دوال المدير لحظر الأجهزة ---
+  Future<bool> banDevice(String deviceId, String reason) async {
+    // استدعاء API الحظر
+    final response = await http.post(
+      Uri.parse('$baseUrl/ban_device'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'deviceId': deviceId,
+        'reason': reason,
+        'bannedBy': currentUser?['uid'],
+      }),
+    );
+    return response.statusCode == 200;
+  }
+
+  Future<bool> unbanDevice(String deviceId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/unban_device'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'deviceId': deviceId}),
+    );
+    return response.statusCode == 200;
+  }
+
+  Future<bool> tryAutoLogin() async {
+    _log("AUTO_LOGIN", "Checking cache...");
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!prefs.containsKey(_userKey)) {
+        _log("AUTO_LOGIN", "No cached user found.");
+        return false;
+      }
+
+      final userDataString = prefs.getString(_userKey);
+      if (userDataString != null) {
+        currentUser = json.decode(userDataString);
+        _log("AUTO_LOGIN", "User loaded from cache: ${currentUser?['email']}");
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _logError("AUTO_LOGIN", e.toString());
+      return false;
+    }
+  }
+
+  Future<void> logout() async {
+    _log("LOGOUT", "Clearing session...");
+    currentUser = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+  }
+
+  // --- Users ---
+  Future<Map<String, dynamic>?> fetchUser(String uid) async {
+    _log("FETCH_USER", "Requesting user data for UID: $uid");
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/users/$uid'));
+      _log("FETCH_USER", "Response Code: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _log("FETCH_USER", "Data received: $data");
+        return data;
+      } else {
+        _logError("FETCH_USER", "Failed. Body: ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      _logError("FETCH_USER", e.toString());
+      return null;
+    }
   }
 
   // --- دوال الكاش الدائم (Disk Cache) ---
@@ -94,47 +248,32 @@ class ApiService {
   // ===========================================================================
   // 0. Auth
   // ===========================================================================
-  Future<bool> login(String email, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'email': email, 'password': password}),
-      );
+  // // --- تسجيل الدخول وحفظ البيانات ---
+  // Future<bool> login(String email, String password) async {
+  //   try {
+  //     final response = await http.post(
+  //       Uri.parse('$baseUrl/login'),
+  //       headers: {'Content-Type': 'application/json'},
+  //       body: json.encode({'email': email, 'password': password}),
+  //     );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        currentUser = data;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_userKey, json.encode(data));
-        return true;
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
+  //     if (response.statusCode == 200) {
+  //       final data = json.decode(response.body);
+  //       currentUser = data;
 
-  Future<bool> tryAutoLogin() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (!prefs.containsKey(_userKey)) return false;
-      final userDataString = prefs.getString(_userKey);
-      if (userDataString != null) {
-        currentUser = json.decode(userDataString);
-        return true;
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
+  //       // 💾 حفظ البيانات في الهاتف (SharedPreferences)
+  //       final prefs = await SharedPreferences.getInstance();
+  //       await prefs.setString(_userKey, json.encode(data));
 
-  Future<void> logout() async {
-    currentUser = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); // مسح كل الكاش عند الخروج
-  }
+  //       print("✅ Login Saved: ${data['email']}");
+  //       return true;
+  //     }
+  //     return false;
+  //   } catch (e) {
+  //     print("Login Error: $e");
+  //     return false;
+  //   }
+  // }
 
   // ===========================================================================
   // 1. المستخدمين (Users)
@@ -173,24 +312,6 @@ class ApiService {
       return response.statusCode == 200;
     } catch (e) {
       return false;
-    }
-  }
-
-  Future<Map<String, dynamic>?> fetchUser(String uid) async {
-    // محاولة البحث في الكاش المحلي للمستخدمين أولاً
-    final users = await _loadFromDisk('CACHE_USERS');
-    final cachedUser = users.firstWhere(
-      (u) => (u['id'] ?? u['uid']) == uid,
-      orElse: () => null,
-    );
-    if (cachedUser != null) return cachedUser;
-
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/users/$uid'));
-      if (response.statusCode == 200) return json.decode(response.body);
-      return null;
-    } catch (e) {
-      return null;
     }
   }
 

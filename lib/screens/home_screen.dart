@@ -1,3 +1,4 @@
+import 'dart:convert'; // [إضافة] لترميز JSON
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_dashboard.dart';
@@ -10,7 +11,9 @@ import 'package:drone_academy/screens/trainee_competitions_screen.dart';
 import 'package:drone_academy/screens/trainee_dashboard.dart';
 import 'package:drone_academy/screens/trainer_dashboard.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/widgets/loading_view.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // [إضافة] للحفظ المحلي
 
 class ThemeService {
   static Future<void> saveThemeMode(ThemeMode mode) async {
@@ -37,46 +40,62 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    _loadUserData();
   }
 
-  Future<void> _fetchUserData() async {
-    // --- التعديل الجوهري: الاعتماد على ApiService.currentUser بدلاً من Firebase ---
-    final apiUser = ApiService.currentUser;
+  // --- دالة تحميل البيانات (المطورة) ---
+  Future<void> _loadUserData() async {
+    // 1. القراءة الفورية من الذاكرة (RAM)
+    var user = ApiService.currentUser;
 
-    if (apiUser != null) {
-      print("🔵 HomeScreen: Loading from ApiService Memory...");
+    if (user == null) {
+      // إذا كانت الذاكرة فارغة، نحاول القراءة من القرص (Disk)
+      await _apiService.tryAutoLogin();
+      user = ApiService.currentUser;
+    }
+
+    if (user != null) {
       if (mounted) {
         setState(() {
-          _userName = apiUser['displayName'];
-          _userRole = (apiUser['role'] ?? 'trainee')
-              .toString()
-              .toLowerCase()
-              .trim();
-          _photoUrl = apiUser['photoUrl'];
+          _userName = user!['displayName'];
+          _userRole = user!['role'];
+          _photoUrl = user!['photoUrl'];
           _isLoading = false;
         });
-        print("🟢 Role set to: $_userRole");
+      }
+
+      // 2. تحديث البيانات من السيرفر في الخلفية (لضمان وجود أحدث صورة)
+      final uid = user['uid'] ?? user['id'];
+      try {
+        final freshData = await _apiService.fetchUser(uid);
+        if (freshData != null && mounted) {
+          setState(() {
+            _userName = freshData['displayName'];
+            _userRole = freshData['role'];
+            _photoUrl = freshData['photoUrl'];
+          });
+
+          // [هام جداً] حفظ البيانات الجديدة (والصورة) في ذاكرة الهاتف الدائمة
+          ApiService.currentUser = freshData;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('cached_user_data', json.encode(freshData));
+        }
+      } catch (e) {
+        print("Failed to refresh user data: $e");
       }
     } else {
-      // إذا لم يكن هناك مستخدم في الذاكرة (مثلاً عند إعادة تشغيل التطبيق بالكامل)
-      // هنا يجب عادةً العودة لشاشة تسجيل الدخول أو استخدام التخزين المحلي
-      print("🔴 HomeScreen: No user in memory. Redirecting to Login...");
+      // فشل العثور على مستخدم
       if (mounted) {
-        Future.delayed(Duration.zero, () {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-          );
-        });
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
       }
     }
   }
 
   Widget _buildBody(AppLocalizations l10n) {
-    // توجيه حسب الدور
     if (_userRole == 'owner' || _userRole == 'admin') {
-      return const AdminDashboard();
+      return AdminDashboard(setThemeMode: widget.setThemeMode!);
     } else if (_userRole == 'trainer') {
       return TrainerDashboard(onLocaleChange: widget.setLocale);
     } else if (_userRole == 'trainee') {
@@ -118,9 +137,11 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Text(l10n.welcome, style: const TextStyle(fontSize: 24)),
             const SizedBox(height: 10),
-            const CircularProgressIndicator(),
-            const SizedBox(height: 10),
-            const Text("Loading user data..."),
+            const Text("Role unknown or loading..."),
+            ElevatedButton(
+              onPressed: _loadUserData,
+              child: const Text("Retry"),
+            ),
           ],
         ),
       );
@@ -132,12 +153,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final l10n = AppLocalizations.of(context)!;
     final brightness = Theme.of(context).brightness;
 
+    if (_isLoading) {
+      return const LoadingView(message: "جاري تحضير ملفك الشخصي...");
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isLoading ? l10n.loading : (_userName ?? l10n.home)),
+        title: Text(_userName ?? l10n.home), // عرض الاسم بدلاً من "الرئيسية"
         actions: [
           IconButton(
-            tooltip: brightness == Brightness.dark ? 'وضع نهاري' : 'وضع ليلي',
             icon: Icon(
               brightness == Brightness.dark
                   ? Icons.light_mode
@@ -151,6 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
               await ThemeService.saveThemeMode(newMode);
             },
           ),
+
+          // [تحسين] عرض الصورة الشخصية
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: GestureDetector(
@@ -161,44 +187,48 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder: (context) =>
                         ProfileScreen(setLocale: widget.setLocale),
                   ),
-                ).then((_) {
-                  // إعادة تحميل البيانات عند العودة من البروفايل
-                  // لكن بحذر لأننا نعتمد على الذاكرة
-                  setState(() {
-                    if (ApiService.currentUser != null) {
-                      _userName = ApiService.currentUser!['displayName'];
-                      _photoUrl = ApiService.currentUser!['photoUrl'];
-                    }
-                  });
-                });
+                ).then((_) => _loadUserData()); // تحديث عند العودة
               },
               child: CircleAvatar(
                 backgroundColor: Colors.grey.shade300,
-                backgroundImage: (_photoUrl != null && _photoUrl!.isNotEmpty)
-                    ? CachedNetworkImageProvider(_photoUrl!)
-                    : null,
-                child: (_photoUrl == null || _photoUrl!.isEmpty)
-                    ? const Icon(Icons.person, color: Colors.grey)
-                    : null,
+                child: ClipOval(
+                  child: (_photoUrl != null && _photoUrl!.isNotEmpty)
+                      ? CachedNetworkImage(
+                          imageUrl: _photoUrl!,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          errorWidget: (context, url, error) =>
+                              const Icon(Icons.person, color: Colors.grey),
+                          useOldImageOnUrlChange:
+                              true, // يحافظ على الصورة القديمة أثناء تحديث الجديدة
+                        )
+                      : const Icon(Icons.person, color: Colors.grey),
+                ),
               ),
             ),
           ),
+
           if (_userRole == 'trainee')
             IconButton(
               tooltip: l10n.myProgress,
               icon: const Icon(Icons.bar_chart),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const MyProgressScreen(),
-                ),
-              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const MyProgressScreen(),
+                  ),
+                );
+              },
             ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildBody(l10n),
+      body: _buildBody(l10n),
     );
   }
 }

@@ -24,25 +24,20 @@ class _EquipmentHistoryScreenState extends State<EquipmentHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-
     return Scaffold(
       appBar: AppBar(title: Text(widget.equipmentName)),
       body: FutureBuilder<List<dynamic>>(
         future: _apiService.fetchEquipmentLogs(widget.equipmentId),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
           final logs = snapshot.data ?? [];
-
-          if (logs.isEmpty) {
+          if (logs.isEmpty)
             return const EmptyStateWidget(
               message: "No history yet.",
               imagePath: 'assets/illustrations/no_data.svg',
             );
-          }
 
-          // ترتيب حسب التاريخ (الأحدث أولاً)
           logs.sort(
             (a, b) =>
                 (b['checkOutTime'] ?? '').compareTo(a['checkOutTime'] ?? ''),

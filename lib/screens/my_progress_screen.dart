@@ -1,6 +1,7 @@
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/widgets/empty_state_widget.dart';
+import 'package:drone_academy/widgets/loading_view.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
@@ -27,11 +28,7 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
   }
 
   Future<void> _loadProgressData() async {
-    // 1. جلب كل التدريبات
     final trainings = await _apiService.fetchTrainings();
-
-    // 2. جلب نتائج المستخدم الحالي (API يعرف المستخدم من الجلسة أو نمرره)
-    // هنا سنفترض أننا نمرر ID المستخدم الحالي المخزن في ApiService.currentUser
     final currentUserId =
         ApiService.currentUser?['uid'] ?? ApiService.currentUser?['id'];
 
@@ -41,7 +38,6 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
     }
 
     final results = await _apiService.fetchResults(traineeUid: currentUserId);
-
     final uniqueCompletedIds = <String>{};
     for (var r in results) {
       uniqueCompletedIds.add(r['trainingId']);
@@ -63,6 +59,12 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    // إذا كان يحمل، اعرض الشاشة الجميلة
+    if (_isLoading) {
+      return const LoadingView(
+        message: "جاري تحضير الصفحة. اذكر الله بينما تجهز...",
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.myProgress)),
@@ -109,7 +111,6 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
                           itemCount: _results.length,
                           itemBuilder: (context, index) {
                             final result = _results[index];
-                            // تأكد من تنسيق التاريخ
                             DateTime date = DateTime.now();
                             if (result['date'] != null)
                               date = DateTime.parse(result['date']);

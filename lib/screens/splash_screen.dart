@@ -1,5 +1,8 @@
 import 'dart:async';
-import 'package:drone_academy/screens/auth_gate.dart';
+import 'package:animate_do/animate_do.dart'; // تأكد أن المكتبة مضافة، أو يمكننا استخدام حركات Flutter العادية
+import 'package:drone_academy/screens/app_status_wrapper.dart';
+import 'package:drone_academy/screens/login_screen.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -17,126 +20,189 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  // قائمة معلومات ونصائح لعرضها
+  final List<String> _droneTips = [
+    "هل تعلم؟ أول طائرة بدون طيار استخدمت في عام 1917.",
+    "نصيحة: تحقق دائماً من سرعة الرياح قبل الإقلاع.",
+    "الأمان أولاً: لا تطر أبداً فوق التجمعات البشرية.",
+    "معلومة: بطاريات الليثيوم تحتاج لعناية خاصة في التخزين.",
+    "نصيحة: استخدم قاعدة الأثلاث للحصول على لقطات سينمائية.",
+    "تذكير: حافظ دائماً على الطائرة في مجال رؤيتك.",
+    "هل تعلم؟ الدرونات تستخدم الآن في الزراعة والإنقاذ.",
+  ];
+
+  int _currentTipIndex = 0;
+  Timer? _tipTimer;
+
   @override
   void initState() {
     super.initState();
-    // المؤقت للانتقال التلقائي
-    Timer(const Duration(seconds: 4), () {
+    _startTipRotation(); // بدء تغيير النصائح
+    _checkLoginStatus();
+  }
+
+  @override
+  void dispose() {
+    _tipTimer?.cancel(); // إيقاف المؤقت عند الخروج
+    super.dispose();
+  }
+
+  // دالة لتغيير النصيحة كل 2.5 ثانية
+  void _startTipRotation() {
+    _tipTimer = Timer.periodic(const Duration(milliseconds: 2500), (timer) {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => AuthGate(
-              setLocale: widget.setLocale,
-              setThemeMode: widget.setThemeMode, // تمرير دالة الثيم
-            ),
-          ),
-        );
+        setState(() {
+          _currentTipIndex = (_currentTipIndex + 1) % _droneTips.length;
+        });
       }
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // الألوان المستوحاة من الصورة
-    const backgroundColor = Color(0xFF111318); // لون الخلفية الداكن
-    const primaryColor = Color(0xFFFF9800); // اللون البرتقالي
+  Future<void> _checkLoginStatus() async {
+    // وقت إضافي قليل للسماح للمستخدم بقراءة معلومة (اختياري)
+    await Future.delayed(const Duration(seconds: 4));
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(),
-            // --- الشعار والدائرة ---
-            Container(
-              width: 180,
-              height: 180,
-              padding: const EdgeInsets.all(4), // سمك الحدود البرتقالية
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: primaryColor, width: 3),
-              ),
-              child: Container(
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black, // خلفية سوداء داخل الدائرة
-                ),
-                child: Center(
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    height: 120,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
-            // --- النص ---
-            const Text(
-              'أكاديمية الدرون',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontFamily: 'Cairo',
-              ),
-            ),
-            const Spacer(),
-            // --- أزرار التحكم بالثيم (مطابقة للصورة) ---
-            Padding(
-              padding: const EdgeInsets.only(bottom: 40.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildThemeButton(
-                    'فاتح',
-                    Icons.wb_sunny_outlined,
-                    ThemeMode.light,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildThemeButton(
-                    'داكن',
-                    Icons.nightlight_round,
-                    ThemeMode.dark,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildThemeButton(
-                    'حسب النظام',
-                    Icons.brightness_auto,
-                    ThemeMode.system,
-                  ),
-                ],
-              ),
-            ),
-          ],
+    final isLoggedIn = await ApiService().tryAutoLogin();
+
+    if (!mounted) return;
+
+    if (isLoggedIn) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => AppStatusWrapper(
+            setLocale: widget.setLocale,
+            setThemeMode: widget.setThemeMode,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
   }
 
-  // ودجت لبناء أزرار الثيم الرمادية
-  Widget _buildThemeButton(String label, IconData icon, ThemeMode mode) {
-    return InkWell(
-      onTap: () => widget.setThemeMode(mode),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2C2C2C), // لون رمادي غامق للأزرار
-          borderRadius: BorderRadius.circular(25),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // خلفية متدرجة جميلة
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0F172A), // كحلي غامق
+              Color(0xFF1E293B), // افتح قليلاً
+            ],
+          ),
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontFamily: 'Cairo',
+            const Spacer(flex: 2),
+
+            // 1. الشعار مع حركة نبض
+            FadeInDown(
+              duration: const Duration(seconds: 1),
+              child: Container(
+                width: 160,
+                height: 160,
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withOpacity(0.3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF9800).withOpacity(0.2),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFFFF9800), width: 2),
+                ),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            Icon(icon, color: Colors.white, size: 16),
+
+            const SizedBox(height: 30),
+
+            // 2. اسم التطبيق
+            FadeInUp(
+              duration: const Duration(seconds: 1),
+              child: const Text(
+                'أكاديمية الدرون',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontFamily: 'Cairo',
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+
+            const Spacer(),
+
+            // 3. منطقة المعلومات المتغيرة (AnimatedSwitcher)
+            SizedBox(
+              height: 80,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 500),
+                  transitionBuilder:
+                      (Widget child, Animation<double> animation) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                  child: Text(
+                    _droneTips[_currentTipIndex],
+                    key: ValueKey<int>(_currentTipIndex), // مهم للحركة
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      height: 1.5,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // 4. مؤشر التحميل
+            const SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: Color(0xFFFF9800),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            const Text(
+              "جاري تجهيز قمرة القيادة...",
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+
+            const Spacer(),
+
+            // رقم الإصدار في الأسفل
+            const Padding(
+              padding: EdgeInsets.only(bottom: 20),
+              child: Text(
+                "v1.0.0",
+                style: TextStyle(color: Colors.white24, fontSize: 12),
+              ),
+            ),
           ],
         ),
       ),

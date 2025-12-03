@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 
 class AuthGate extends StatelessWidget {
   final void Function(Locale) setLocale;
-  final void Function(ThemeMode) setThemeMode; // 1. إضافة المتغير
+  final void Function(ThemeMode) setThemeMode;
 
   const AuthGate({
     super.key,
     required this.setLocale,
-    required this.setThemeMode, // 2. إضافته للمنشئ
+    required this.setThemeMode,
   });
 
   @override
@@ -25,12 +25,10 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData && snapshot.data != null) {
-          return HomeScreen(
-            setLocale: setLocale,
-            setThemeMode: setThemeMode, // 3. تمريره إلى HomeScreen
-          );
+          return HomeScreen(setLocale: setLocale, setThemeMode: setThemeMode);
         } else {
-          return const LoginScreen();
+          // [تصحيح] تمرير الدوال هنا أيضاً
+          return LoginScreen(setLocale: setLocale, setThemeMode: setThemeMode);
         }
       },
     );
