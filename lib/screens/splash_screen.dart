@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:animate_do/animate_do.dart'; // تأكد أن المكتبة مضافة، أو يمكننا استخدام حركات Flutter العادية
 import 'package:drone_academy/screens/app_status_wrapper.dart';
+import 'package:drone_academy/screens/home_screen.dart';
 import 'package:drone_academy/screens/login_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
@@ -67,11 +68,15 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (isLoggedIn) {
+      // الكود الجديد ✅
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => AppStatusWrapper(
-            setLocale: widget.setLocale,
-            setThemeMode: widget.setThemeMode,
+          builder: (_) => AppStatusWrapper(
+            // نمرر الـ HomeScreen كـ child داخل الغلاف
+            child: HomeScreen(
+              setLocale: widget.setLocale,
+              setThemeMode: widget.setThemeMode,
+            ),
           ),
         ),
       );

@@ -1,31 +1,33 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // يفضل إضافة هذه المكتبة لأيقونات احترافية، أو سأستخدم البدائل
+// تأكد من وجود المكتبة في pubspec.yaml أو استخدم أيقونات Material البديلة كما فعلت في الكود
+// import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ContactDeveloperScreen extends StatelessWidget {
   const ContactDeveloperScreen({super.key});
 
-  // الروابط
+  // الروابط (تم التحديث)
   final String _telegramUrl = "https://t.me/DevDrond";
-  final String _whatsappUrl = "https://wa.me/963951727833";
-  final String _email =
-      "mailto:shami313p@gmail.com"; // بريد افتراضي (عدله إذا أردت)
+  // 👇 تم تحديث رابط الواتساب
+  final String _whatsappUrl = "https://wa.me/message/EZ3U5DGNRP25M1";
+  final String _email = "mailto:shami313p@gmail.com";
 
   Future<void> _launchUrl(String url) async {
     final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
       debugPrint("Could not launch $url");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ألوان التصميم
     const bgColor = Color(0xFF111318);
     const cardColor = Color(0xFF1E2230);
-    const primaryColor = Color(0xFFFF9800); // برتقالي
-    const accentColor = Color(0xFF3F51B5); // أزرق
+    const primaryColor = Color(0xFFFF9800);
+    const accentColor = Color(0xFF3F51B5);
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -41,13 +43,13 @@ class ContactDeveloperScreen extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. الهيدر التعريفي (Header)
+            // 1. الهيدر التعريفي
             Stack(
               alignment: Alignment.bottomCenter,
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  height: 280,
+                  height: 260,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -55,8 +57,8 @@ class ContactDeveloperScreen extends StatelessWidget {
                       colors: [accentColor, const Color(0xFF000000)],
                     ),
                     borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(60),
-                      bottomRight: Radius.circular(60),
+                      bottomLeft: Radius.circular(50),
+                      bottomRight: Radius.circular(50),
                     ),
                   ),
                   child: Center(
@@ -65,7 +67,6 @@ class ContactDeveloperScreen extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // أيقونة المبرمج (أو صورتك)
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -80,29 +81,28 @@ class ContactDeveloperScreen extends StatelessWidget {
                               ],
                             ),
                             child: const CircleAvatar(
-                              radius: 50,
+                              radius: 45,
                               backgroundColor: cardColor,
-                              child: Icon(
-                                Icons.code,
-                                size: 50,
-                                color: Colors.white,
-                              ), // يمكن استبدالها بصورتك
+                              // ضع شعار التطبيق أو صورتك هنا
+                              backgroundImage: AssetImage(
+                                'assets/images/logo.png',
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           const Text(
                             "الشامي",
                             style: TextStyle(
-                              fontSize: 28,
+                              fontSize: 24,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
-                              letterSpacing: 1.5,
+                              letterSpacing: 1.2,
                             ),
                           ),
                           const Text(
                             "Software Engineer & App Developer",
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               color: Colors.white70,
                               fontStyle: FontStyle.italic,
                             ),
@@ -115,9 +115,9 @@ class ContactDeveloperScreen extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 30),
 
-            // 2. بطاقات التواصل (Social Cards)
+            // 2. بطاقات التواصل
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -128,7 +128,7 @@ class ContactDeveloperScreen extends StatelessWidget {
                     child: const Padding(
                       padding: EdgeInsets.only(bottom: 16, right: 8),
                       child: Text(
-                        "تواصل معي مباشرة",
+                        "قنوات التواصل",
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -139,43 +139,35 @@ class ContactDeveloperScreen extends StatelessWidget {
                   ),
 
                   _buildContactCard(
-                    title: "Telegram",
-                    subtitle: "@DevDrond",
-                    icon: Icons.send, // أيقونة بديلة لتلغرام
-                    color: const Color(0xFF0088CC),
-                    onTap: () => _launchUrl(_telegramUrl),
+                    title: "WhatsApp",
+                    subtitle: "اضغط للمراسلة المباشرة",
+                    icon: Icons.chat,
+                    color: const Color(0xFF25D366),
+                    onTap: () => _launchUrl(_whatsappUrl),
                     delay: 300,
                   ),
 
                   _buildContactCard(
-                    title: "WhatsApp",
-                    subtitle: "+963 951 727 833",
-                    icon: Icons.chat, // أيقونة بديلة للواتس
-                    color: const Color(0xFF25D366),
-                    onTap: () => _launchUrl(_whatsappUrl),
+                    title: "Telegram",
+                    subtitle: "@DevDrond",
+                    icon: Icons.send,
+                    color: const Color(0xFF0088CC),
+                    onTap: () => _launchUrl(_telegramUrl),
                     delay: 400,
-                  ),
-
-                  _buildContactCard(
-                    title: "Email",
-                    subtitle: "اضغط للمراسلة",
-                    icon: Icons.email_outlined,
-                    color: Colors.redAccent,
-                    onTap: () => _launchUrl(_email),
-                    delay: 500,
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
 
-            // 3. قسم "عن المطور" (معلومات جميلة)
+            // 3. قسم الباركود (QR Code) الجديد
             FadeInUp(
-              delay: const Duration(milliseconds: 600),
+              delay: const Duration(milliseconds: 500),
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 padding: const EdgeInsets.all(20),
+                width: double.infinity,
                 decoration: BoxDecoration(
                   color: cardColor,
                   borderRadius: BorderRadius.circular(20),
@@ -183,47 +175,60 @@ class ContactDeveloperScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.format_quote,
-                      color: Colors.grey,
-                      size: 40,
-                    ),
-                    const SizedBox(height: 10),
                     const Text(
-                      "نحول الأفكار المعقدة إلى تطبيقات ذكية وسلسة. هدفنا هو تمكين التكنولوجيا لخدمة المسلمين بأعلى معايير الجودة والأداء.",
-                      textAlign: TextAlign.center,
+                      "أو امسح الباركود للتواصل السريع",
                       style: TextStyle(
                         color: Colors.white70,
-                        height: 1.6,
                         fontSize: 14,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Divider(color: Colors.white10),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildSkillChip("Flutter"),
-                        const SizedBox(width: 8),
-                        _buildSkillChip("Node.js"),
-                        const SizedBox(width: 8),
-                        _buildSkillChip("AI Integration"),
-                      ],
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color:
+                            Colors.white, // خلفية بيضاء للباركود ليكون واضحاً
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      // 👇 هنا نضع صورة الباركود الخاصة بك
+                      child: Image.asset(
+                        'assets/images/contact_qr.jpg',
+                        width: 180,
+                        height: 180,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const SizedBox(
+                            width: 180,
+                            height: 180,
+                            child: Center(
+                              child: Text(
+                                "QR Code Image\nNot Found",
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "امسح الرمز باستخدام كاميرا هاتفك",
+                      style: TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                   ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 30),
 
             // Footer
             const Text(
-              "v1.0.0 • Made with ❤️",
+              "v1.0.0 • Made with ❤️ by Shami",
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
           ],
         ),
       ),
@@ -241,7 +246,7 @@ class ContactDeveloperScreen extends StatelessWidget {
     return FadeInUp(
       delay: Duration(milliseconds: delay),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: const Color(0xFF1E2230),
           borderRadius: BorderRadius.circular(16),
@@ -263,10 +268,10 @@ class ContactDeveloperScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(icon, color: color, size: 24),
                   ),
@@ -283,7 +288,6 @@ class ContactDeveloperScreen extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
                         Text(
                           subtitle,
                           style: TextStyle(
@@ -297,7 +301,7 @@ class ContactDeveloperScreen extends StatelessWidget {
                   const Icon(
                     Icons.arrow_forward_ios,
                     color: Colors.grey,
-                    size: 16,
+                    size: 14,
                   ),
                 ],
               ),

@@ -1,4 +1,4 @@
-import 'dart:convert'; // [إضافة] لترميز JSON
+import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_dashboard.dart';
@@ -13,7 +13,7 @@ import 'package:drone_academy/screens/trainer_dashboard.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/widgets/loading_view.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // [إضافة] للحفظ المحلي
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeService {
   static Future<void> saveThemeMode(ThemeMode mode) async {
@@ -43,13 +43,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadUserData();
   }
 
-  // --- دالة تحميل البيانات (المطورة) ---
   Future<void> _loadUserData() async {
-    // 1. القراءة الفورية من الذاكرة (RAM)
     var user = ApiService.currentUser;
 
     if (user == null) {
-      // إذا كانت الذاكرة فارغة، نحاول القراءة من القرص (Disk)
       await _apiService.tryAutoLogin();
       user = ApiService.currentUser;
     }
@@ -64,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      // 2. تحديث البيانات من السيرفر في الخلفية (لضمان وجود أحدث صورة)
       final uid = user['uid'] ?? user['id'];
       try {
         final freshData = await _apiService.fetchUser(uid);
@@ -75,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
             _photoUrl = freshData['photoUrl'];
           });
 
-          // [هام جداً] حفظ البيانات الجديدة (والصورة) في ذاكرة الهاتف الدائمة
           ApiService.currentUser = freshData;
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('cached_user_data', json.encode(freshData));
@@ -84,7 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
         print("Failed to refresh user data: $e");
       }
     } else {
-      // فشل العثور على مستخدم
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -95,7 +89,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBody(AppLocalizations l10n) {
     if (_userRole == 'owner' || _userRole == 'admin') {
-      return AdminDashboard(setThemeMode: widget.setThemeMode!);
+      // [تصحيح] استخدام دالة فارغة كبديل في حال كانت القيمة null لمنع الانهيار
+      return AdminDashboard(
+        setThemeMode: widget.setThemeMode ?? (ThemeMode m) {},
+      );
     } else if (_userRole == 'trainer') {
       return TrainerDashboard(onLocaleChange: widget.setLocale);
     } else if (_userRole == 'trainee') {
@@ -159,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_userName ?? l10n.home), // عرض الاسم بدلاً من "الرئيسية"
+        title: Text(_userName ?? l10n.home),
         actions: [
           IconButton(
             icon: Icon(
@@ -171,12 +168,11 @@ class _HomeScreenState extends State<HomeScreen> {
               final newMode = brightness == Brightness.dark
                   ? ThemeMode.light
                   : ThemeMode.dark;
+              // استخدام ?.call() آمن هنا
               widget.setThemeMode?.call(newMode);
               await ThemeService.saveThemeMode(newMode);
             },
           ),
-
-          // [تحسين] عرض الصورة الشخصية
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: GestureDetector(
@@ -187,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder: (context) =>
                         ProfileScreen(setLocale: widget.setLocale),
                   ),
-                ).then((_) => _loadUserData()); // تحديث عند العودة
+                ).then((_) => _loadUserData());
               },
               child: CircleAvatar(
                 backgroundColor: Colors.grey.shade300,
@@ -204,15 +200,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           errorWidget: (context, url, error) =>
                               const Icon(Icons.person, color: Colors.grey),
-                          useOldImageOnUrlChange:
-                              true, // يحافظ على الصورة القديمة أثناء تحديث الجديدة
+                          useOldImageOnUrlChange: true,
                         )
                       : const Icon(Icons.person, color: Colors.grey),
                 ),
               ),
             ),
           ),
-
           if (_userRole == 'trainee')
             IconButton(
               tooltip: l10n.myProgress,

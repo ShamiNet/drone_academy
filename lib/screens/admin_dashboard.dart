@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_settings_screen.dart';
 import 'package:drone_academy/screens/contact_developer_screen.dart'; // [إضافة] استيراد شاشة الدعم
+import 'package:drone_academy/screens/error_logs_screen.dart';
 import 'package:drone_academy/screens/manage_competitions_tab.dart';
 import 'package:drone_academy/screens/manage_equipment_screen.dart';
 import 'package:drone_academy/screens/manage_inventory_screen.dart';
@@ -337,6 +338,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     onTap: () {
                       Navigator.pop(context);
                       _goToSupport(); // الانتقال لصفحة التواصل
+                    },
+                  ),
+                  // مثال لإضافة الزر في Drawer المدير
+                  ListTile(
+                    leading: const Icon(
+                      Icons.bug_report,
+                      color: Colors.redAccent,
+                    ),
+                    title: const Text(
+                      "سجل الأخطاء (للمطور)",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ErrorLogsScreen(),
+                        ),
+                      );
                     },
                   ),
                 ],

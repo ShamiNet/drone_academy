@@ -8,7 +8,14 @@ import 'package:intl/intl.dart';
 
 class UserDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> userData;
-  const UserDetailsScreen({super.key, required this.userData});
+  // متغير جديد للتحكم في عرض المعلومات الشخصية إجبارياً
+  final bool forceInfoView;
+
+  const UserDetailsScreen({
+    super.key,
+    required this.userData,
+    this.forceInfoView = false, // القيمة الافتراضية
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +41,8 @@ class UserDetailsScreen extends StatelessWidget {
     const primaryColor = Color(0xFFFF9800);
     const accentColor = Color(0xFF3F51B5);
 
-    if (role == 'trainee') {
+    // [تعديل] الشرط هنا: نذهب لصفحة التدريب فقط إذا كان متدرباً ولم نطلب عرض المعلومات إجبارياً
+    if (role == 'trainee' && !forceInfoView) {
       return TraineeProfileScreen(traineeData: userData);
     }
 
@@ -44,6 +52,9 @@ class UserDetailsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        title: forceInfoView
+            ? const Text("الملف الشخصي", style: TextStyle(color: Colors.white))
+            : null,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -97,33 +108,37 @@ class UserDetailsScreen extends StatelessWidget {
                   bottom: -60,
                   child: FadeInDown(
                     duration: const Duration(milliseconds: 800),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: bgColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 70,
-                        backgroundColor: cardColor,
-                        backgroundImage:
-                            (photoUrl != null && photoUrl.isNotEmpty)
-                            ? CachedNetworkImageProvider(photoUrl)
-                            : null,
-                        child: (photoUrl == null)
-                            ? const Icon(
-                                Icons.person,
-                                size: 70,
-                                color: Colors.grey,
-                              )
-                            : null,
+                    child: Hero(
+                      tag:
+                          'user_avatar_${userData['uid'] ?? userData['id']}', // Hero Animation
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: bgColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 70,
+                          backgroundColor: cardColor,
+                          backgroundImage:
+                              (photoUrl != null && photoUrl.isNotEmpty)
+                              ? CachedNetworkImageProvider(photoUrl)
+                              : null,
+                          child: (photoUrl == null)
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 70,
+                                  color: Colors.grey,
+                                )
+                              : null,
+                        ),
                       ),
                     ),
                   ),
@@ -253,6 +268,16 @@ class UserDetailsScreen extends StatelessWidget {
                         userData['groupName']?.toString(),
                         Icons.group,
                       ),
+                      // عرض الوحدة
+                      _InfoItem(
+                        "نوع الوحدة",
+                        userData['unitType'] == 'liwa'
+                            ? 'ألوية'
+                            : (userData['unitType'] == 'markazia'
+                                  ? 'مركزية'
+                                  : 'غير محدد'),
+                        Icons.flag,
+                      ),
                     ]),
 
                     const SizedBox(height: 24),
@@ -271,6 +296,16 @@ class UserDetailsScreen extends StatelessWidget {
                         "البلد",
                         userData['country']?.toString(),
                         Icons.public,
+                      ),
+                      // عرض الحالة الاجتماعية
+                      _InfoItem(
+                        "الحالة الاجتماعية",
+                        userData['maritalStatus'] == 'married'
+                            ? 'متزوج'
+                            : (userData['maritalStatus'] == 'single'
+                                  ? 'أعزب'
+                                  : 'غير محدد'),
+                        Icons.family_restroom,
                       ),
                       _InfoItem(
                         "تاريخ الانضمام",
@@ -316,56 +351,6 @@ class UserDetailsScreen extends StatelessWidget {
                         Icons.thumb_up,
                       ),
                     ]),
-
-                    // --- قسم حظر الجهاز (للمدير فقط) ---
-                    if (amIAdmin && userData['lastDeviceId'] != null) ...[
-                      const SizedBox(height: 40),
-                      _buildSectionTitle(
-                        "أمان النظام",
-                        Icons.security,
-                        Colors.redAccent,
-                      ),
-                      FadeInUp(
-                        delay: const Duration(milliseconds: 600),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2C0E0E), // خلفية حمراء داكنة
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.redAccent.withOpacity(0.3),
-                            ),
-                          ),
-                          child: ListTile(
-                            leading: const Icon(
-                              Icons.phonelink_erase,
-                              color: Colors.redAccent,
-                            ),
-                            title: const Text(
-                              "حظر جهاز هذا المستخدم",
-                              style: TextStyle(
-                                color: Colors.redAccent,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              "ID: ${userData['lastDeviceId']}",
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 10,
-                              ),
-                            ),
-                            onTap: () => _showBanDeviceDialog(
-                              context,
-                              userData['lastDeviceId'],
-                            ),
-                            trailing: const Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               )
@@ -392,7 +377,6 @@ class UserDetailsScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
             const SizedBox(height: 40),
           ],
         ),
@@ -400,6 +384,7 @@ class UserDetailsScreen extends StatelessWidget {
     );
   }
 
+  // ... (بقية الدوال: _getRoleColor, _buildSectionTitle, _buildInfoCard, _formatDate, _InfoItem كما هي في الكود السابق)
   Color _getRoleColor(String role) {
     switch (role.toLowerCase()) {
       case 'owner':
@@ -496,45 +481,6 @@ class UserDetailsScreen extends StatelessWidget {
             );
           }).toList(),
         ),
-      ),
-    );
-  }
-
-  void _showBanDeviceDialog(BuildContext context, String deviceId) {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E2230),
-        title: const Text(
-          "حظر الجهاز نهائياً",
-          style: TextStyle(color: Colors.red),
-        ),
-        content: TextField(
-          controller: reasonController,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: "سبب الحظر...",
-            hintStyle: TextStyle(color: Colors.grey),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              await ApiService().banDevice(deviceId, reasonController.text);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("تم حظر الجهاز بنجاح")),
-              );
-            },
-            child: const Text("حظر"),
-          ),
-        ],
       ),
     );
   }

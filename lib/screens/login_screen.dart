@@ -2,6 +2,7 @@ import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/home_screen.dart';
 import 'package:drone_academy/screens/signup_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/utils/app_notifications.dart';
 import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:drone_academy/widgets/loading_view.dart';
 import 'package:flutter/material.dart';
@@ -31,38 +32,71 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // داخل كلاس _LoginScreenState
+
   Future<void> _login() async {
+    // 1. التحقق من الإدخال
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      showCustomSnackBar(context, 'Please fill in all fields.');
+      AppNotifications.showError(context, "يرجى إدخال البريد وكلمة المرور!");
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final success = await _apiService.login(
+    // 2. استدعاء السيرفر
+    final result = await _apiService.login(
       _emailController.text.trim(),
       _passwordController.text.trim(),
     );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      if (success) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(
-              // [تصحيح] تمرير الدوال الحقيقية بدلاً من الطباعة فقط
-              setLocale: widget.setLocale ?? (l) {},
-              setThemeMode: widget.setThemeMode,
-            ),
-          ),
-        );
+    // 3. التحقق من النتيجة
+    if (result['success'] == true) {
+      // ✅ نجاح
+      AppNotifications.showSuccess(
+        context,
+        "تم تسجيل الدخول بنجاح، مرحباً بك!",
+      );
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(setLocale: (Locale locale) {}),
+        ),
+      );
+    } else {
+      // ❌ فشل الدخول
+      // تحويل الخطأ إلى نص لضمان عدم حدوث مشاكل Null
+      String errorCode = result['error']?.toString() ?? 'Unknown Error';
+
+      // طباعة الخطأ في الكونسول (لك أنت كمبرمج)
+      print("🔍 DEBUG: Login Error Code: $errorCode");
+
+      String userMessage = "";
+
+      // تحديد الرسالة المناسبة
+      if (errorCode.contains('USER_BANNED')) {
+        userMessage = "⛔ تم حظر حسابك من قبل الإدارة.";
+      } else if (errorCode.contains('DEVICE_BANNED')) {
+        String reason = result['reason'] ?? "مخالفة القوانين";
+        userMessage = "⛔ هذا الجهاز محظور من الدخول.\nالسبب: $reason";
+      } else if (errorCode.contains('EMAIL_NOT_FOUND') ||
+          errorCode.contains('INVALID_PASSWORD') ||
+          errorCode.contains('INVALID_LOGIN_CREDENTIALS')) {
+        // إضافة كود فايربيس المحتمل
+        userMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+      } else if (errorCode.contains('Connection error') ||
+          errorCode.contains('SocketException')) {
+        userMessage = "خطأ في الاتصال، تأكد من الإنترنت وتشغيل السيرفر.";
       } else {
-        showCustomSnackBar(
-          context,
-          'Login failed. Check credentials or connection.',
-        );
+        // ⚠️ هام جداً: في حال كان الخطأ غير معروف، نعرضه كما جاء من السيرفر
+        // هذا سيساعدك في معرفة "السبب" الذي كان يختفي
+        userMessage = "فشل الدخول: $errorCode";
       }
+
+      // عرض الإشعار
+      AppNotifications.showError(context, userMessage, title: "تنبيه");
     }
   }
 

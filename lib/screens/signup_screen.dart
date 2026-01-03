@@ -1,9 +1,7 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:flutter/material.dart';
 
 enum UserRole { trainee, trainer }
 
@@ -18,6 +16,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
   final _displayNameController = TextEditingController();
   UserRole? _selectedRole = UserRole.trainee;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -27,47 +26,49 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  // استخدام ApiService لإنشاء الحساب (المرور عبر السيرفر)
   Future<void> _signUp() async {
     if (_selectedRole == null) return;
-    try {
-      final UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-      if (userCredential.user != null) {
-        final String uid = userCredential.user!.uid;
-        final String roleString = _selectedRole == UserRole.trainer
-            ? 'trainer'
-            : 'trainee';
-        final fcmToken = await FirebaseMessaging.instance.getToken();
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'uid': uid,
-          'displayName': _displayNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'role': roleString,
-          'photoUrl': '',
-          'fcmToken': fcmToken ?? '',
-        });
-        if (mounted) {
-          showCustomSnackBar(
-            context,
-            'Account created successfully!',
-            isError: false,
-          );
-          Navigator.of(context).pop();
-        }
+    if (_emailController.text.isEmpty ||
+        _passwordController.text.isEmpty ||
+        _displayNameController.text.isEmpty) {
+      showCustomSnackBar(context, 'يرجى ملء جميع الحقول');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final ApiService apiService = ApiService();
+    final String roleString = _selectedRole == UserRole.trainer
+        ? 'trainer'
+        : 'trainee';
+
+    // استدعاء دالة التسجيل في السيرفر
+    final result = await apiService.signup(
+      email: _emailController.text.trim(),
+      password: _passwordController.text.trim(),
+      displayName: _displayNameController.text.trim(),
+      role: roleString,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      showCustomSnackBar(context, 'تم إنشاء الحساب بنجاح!', isError: false);
+      Navigator.of(context).pop(); // العودة وتسجيل الدخول تلقائياً
+    } else {
+      String errorMsg = result['error'] ?? 'فشل إنشاء الحساب';
+
+      // معالجة رسائل الحظر أو الأخطاء الشائعة
+      if (errorMsg == 'DEVICE_BANNED') {
+        errorMsg =
+            '⛔ تم حظر هذا الجهاز من إنشاء حسابات جديدة.\nالسبب: ${result['reason'] ?? "غير محدد"}';
+      } else if (errorMsg.contains('email-already-in-use')) {
+        errorMsg = 'البريد الإلكتروني مستخدم بالفعل';
       }
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = 'An unknown error occurred.';
-      if (e.code == 'weak-password') {
-        errorMessage = 'كلمة المرور ضعيفة جداً (يجب أن تكون 6 أحرف على الأقل).';
-      } else if (e.code == 'email-already-in-use') {
-        errorMessage = 'هذا البريد الإلكتروني مستخدم بالفعل.';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'البريد الإلكتروني المدخل غير صالح.';
-      }
-      showCustomSnackBar(context, errorMessage);
+
+      showCustomSnackBar(context, errorMsg);
     }
   }
 
@@ -145,14 +146,23 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _signUp,
+                onPressed: _isLoading ? null : _signUp,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: Text(l10n.signUp, style: const TextStyle(fontSize: 18)),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(l10n.signUp, style: const TextStyle(fontSize: 18)),
               ),
             ],
           ),

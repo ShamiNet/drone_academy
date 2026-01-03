@@ -1,21 +1,61 @@
 // lib/main.dart
 
+import 'dart:ui';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/splash_screen.dart';
+import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/services/notification_service.dart';
 import 'package:drone_academy/theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:toastification/toastification.dart';
+
+// [تم الحذف] لا نحتاج استيراد هذا الملف إذا لم يكن موجوداً
+// import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  await NotificationService().initNotifications();
+
+  // [تعديل] تهيئة فايربيس بدون خيارات (سيعتمد على google-services.json)
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    print("Firebase init error: $e");
+  }
+
+  // إعدادات فايرستور (اختياري، للكاش)
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
+
+  // تهيئة الإشعارات
+  await NotificationService().initNotifications();
+
+  // --- بداية كود التقاط الأخطاء ---
+
+  // 1. التقاط أخطاء فلاتر (الشاشة الحمراء)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details); // عرض الخطأ في الكونسول
+    ApiService().logAppError(
+      error: details.exceptionAsString(),
+      stackTrace: details.stack.toString(),
+    );
+  };
+
+  // 2. التقاط الأخطاء البرمجية الخلفية (Async Errors)
+  PlatformDispatcher.instance.onError = (error, stack) {
+    ApiService().logAppError(
+      error: error.toString(),
+      stackTrace: stack.toString(),
+    );
+    return true;
+  };
+
+  // --- نهاية كود التقاط الأخطاء ---
+
   runApp(const MyApp());
 }
 
@@ -44,21 +84,23 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Drone Academy',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: _themeMode, // استخدام المتغير
-      locale: _locale,
-      supportedLocales: const [Locale('en'), Locale('ar'), Locale('ru')],
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      // تمرير دوال اللغة والثيم إلى السبلاش
-      home: SplashScreen(setLocale: setLocale, setThemeMode: setThemeMode),
+    return ToastificationWrapper(
+      child: MaterialApp(
+        title: 'Drone Academy',
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: _themeMode, // استخدام المتغير
+        locale: _locale,
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('ru')],
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        // تمرير دوال اللغة والثيم إلى السبلاش
+        home: SplashScreen(setLocale: setLocale, setThemeMode: setThemeMode),
+      ),
     );
   }
 }

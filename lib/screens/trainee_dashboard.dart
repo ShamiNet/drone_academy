@@ -14,6 +14,35 @@ class TraineeDashboard extends StatefulWidget {
 class _TraineeDashboardState extends State<TraineeDashboard> {
   final ApiService _apiService = ApiService();
 
+  // متغير لحفظ المستوى الحالي (الافتراضي 1)
+  int _userLevel = 1;
+  bool _isLoadingUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUserData();
+  }
+
+  Future<void> _refreshUserData() async {
+    try {
+      final currentUid =
+          ApiService.currentUser?['uid'] ?? ApiService.currentUser?['id'];
+      if (currentUid != null) {
+        final userData = await _apiService.fetchUser(currentUid);
+        if (userData != null && mounted) {
+          setState(() {
+            _userLevel = int.tryParse(userData['level'].toString()) ?? 1;
+            ApiService.currentUser = userData;
+            _isLoadingUser = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingUser = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -21,10 +50,36 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
 
     return Scaffold(
       backgroundColor: bgColor,
+      appBar: AppBar(
+        backgroundColor: bgColor,
+        // تغيير العنوان ليعكس أنه يعرض كل التدريبات حتى المستوى الحالي
+        title: _isLoadingUser
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                "التدريبات المتاحة (حتى مستوى $_userLevel)",
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: () {
+              setState(() => _isLoadingUser = true);
+              _refreshUserData();
+            },
+          ),
+        ],
+      ),
       body: StreamBuilder<List<dynamic>>(
         stream: _apiService.streamTrainings(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting ||
+              _isLoadingUser) {
             return Shimmer.fromColors(
               baseColor: Colors.grey.shade800,
               highlightColor: Colors.grey.shade700,
@@ -47,17 +102,27 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
             );
           }
 
-          final trainings = snapshot.data ?? [];
-          if (trainings.isEmpty) {
+          final allTrainings = snapshot.data ?? [];
+
+          // 🔥 التعديل هنا: استخدام (<=) بدلاً من (==)
+          // هذا يعني: اعرض أي تمرين مستواه أقل من أو يساوي مستوى المتدرب
+          final filteredTrainings = allTrainings.where((training) {
+            final trainingLevel =
+                int.tryParse(training['level'].toString()) ?? 1;
+            return trainingLevel <= _userLevel;
+          }).toList();
+
+          if (filteredTrainings.isEmpty) {
             return EmptyStateWidget(
               message: l10n.noTrainingsAvailable,
               imagePath: 'assets/illustrations/no_data.svg',
             );
           }
 
+          // تجميع التمارين حسب المستوى لعرضها مرتبة
           final Map<int, List<dynamic>> trainingsByLevel = {};
-          for (var training in trainings) {
-            final level = training['level'] as int? ?? 1;
+          for (var training in filteredTrainings) {
+            final level = int.tryParse(training['level'].toString()) ?? 1;
             if (trainingsByLevel[level] == null) {
               trainingsByLevel[level] = [];
             }
@@ -71,11 +136,22 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
             itemBuilder: (context, index) {
               final level = sortedLevels[index];
               final levelTrainings = trainingsByLevel[level]!;
+
+              // جعل القائمة مفتوحة فقط لأعلى مستوى وصل له المتدرب
+              // المستويات السابقة تكون مغلقة (اختياري، لترتيب الشكل)
+              final bool isCurrentLevel = (level == _userLevel);
+
               return Container(
                 margin: const EdgeInsets.symmetric(vertical: 8.0),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E2230),
                   borderRadius: BorderRadius.circular(10),
+                  // تمييز بسيط للمستوى الحالي بإطار ملون
+                  border: isCurrentLevel
+                      ? Border.all(
+                          color: const Color(0xFF3F51B5).withOpacity(0.5),
+                        )
+                      : null,
                 ),
                 child: Theme(
                   data: Theme.of(
@@ -84,14 +160,19 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
                   child: ExpansionTile(
                     title: Text(
                       '${l10n.level} $level',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
-                        color: Colors.white,
+                        // تلوين عنوان المستوى الحالي لتمييزه
+                        color: isCurrentLevel
+                            ? const Color(0xFF64B5F6)
+                            : Colors.white,
                       ),
                     ),
                     leading: CircleAvatar(
-                      backgroundColor: const Color(0xFF3F51B5),
+                      backgroundColor: isCurrentLevel
+                          ? const Color(0xFF3F51B5)
+                          : Colors.grey.shade700,
                       child: Text(
                         '$level',
                         style: const TextStyle(color: Colors.white),
@@ -99,7 +180,8 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
                     ),
                     collapsedIconColor: Colors.grey,
                     iconColor: const Color(0xFF8FA1B4),
-                    initiallyExpanded: index == 0,
+                    initiallyExpanded:
+                        isCurrentLevel, // فتح المستوى الحالي تلقائياً
                     children: levelTrainings.map((training) {
                       return TrainingCard(training: training);
                     }).toList(),
