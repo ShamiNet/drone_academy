@@ -266,19 +266,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trainers => 'Trainers';
 
   @override
-  String get date => 'التاريخ';
+  String get date => 'Date';
 
   @override
-  String get endTime => 'وقت الانتهاء';
+  String get endTime => 'End Time';
 
   @override
-  String get sessionTitle => 'عنوان الحصة';
+  String get sessionTitle => 'Session Title';
 
   @override
-  String get startTime => 'وقت البدء';
+  String get startTime => 'Start Time';
 
   @override
-  String get trainer => 'المدرب';
+  String get trainer => 'Trainer';
 
   @override
   String get trainings => 'Trainings';
@@ -507,6 +507,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get checkInItem => 'Check In Item';
+
+  @override
+  String get checkOutItem => 'Check Out Item';
 
   @override
   String get notesOnReturn =>
@@ -753,4 +756,106 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get moveToBottom => 'Move to Bottom';
+
+  @override
+  String get userBannedMessage =>
+      '⛔ Your account has been banned by the admin. Logging out.';
+
+  @override
+  String get loginFailed => 'Login failed';
+
+  @override
+  String get signupFailed => 'Signup failed';
+
+  @override
+  String get connectionError => 'Connection error';
+
+  @override
+  String get apiError => 'API Error';
+
+  @override
+  String trainingsLevel(Object level) {
+    return 'Level $level Trainings';
+  }
+
+  @override
+  String trainingsAvailableLevel(Object level) {
+    return 'Available Trainings (up to level $level)';
+  }
+
+  @override
+  String get traineeLevel => 'Trainee Level';
+
+  @override
+  String get level1Beginner => 'Level 1 (Beginner)';
+
+  @override
+  String get level2Intermediate => 'Level 2 (Intermediate)';
+
+  @override
+  String get level3Advanced => 'Level 3 (Advanced)';
+
+  @override
+  String get unitType => 'Unit Type';
+
+  @override
+  String get notSpecified => 'Not Specified';
+
+  @override
+  String get liwa => 'Brigades';
+
+  @override
+  String get markazia => 'Central';
+
+  @override
+  String get responsibleTrainer => 'Responsible Trainer';
+
+  @override
+  String get noTrainer => 'No Trainer';
+
+  @override
+  String get userDataUpdated => 'User data and level updated successfully';
+
+  @override
+  String get updateRequiredTitle => 'Mandatory Update Required';
+
+  @override
+  String get updateRequiredMessage =>
+      'Your current version is too old. To ensure best performance and new features, please update the app now.';
+
+  @override
+  String get updateNow => 'Update Now';
+
+  @override
+  String get contactDeveloperForUpdate =>
+      'Request update from developer (Shami)';
+
+  @override
+  String get oldVersionMessage =>
+      'Your current version is outdated and has stopped working. Please get the latest version to continue.';
+
+  @override
+  String get contactDeveloperTitle => 'Contact Developer';
+
+  @override
+  String get developerName => 'Developer: Shami';
+
+  @override
+  String get contactInfoMessage =>
+      'To get the latest updates, report a problem, or make suggestions, feel free to contact me directly.';
+
+  @override
+  String get contactViaWhatsapp => 'Contact via WhatsApp';
+
+  @override
+  String get scanQrCode => 'Or scan the QR code for quick contact';
+
+  @override
+  String get scanQrInstruction => 'Scan the code using your phone camera';
+
+  @override
+  String get generalSupervisor => 'General Supervisor';
+
+  @override
+  String get madeBy => 'v1.0.0 • Made with ❤️ by Shami';
 }

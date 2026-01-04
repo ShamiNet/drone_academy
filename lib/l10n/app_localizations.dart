@@ -613,31 +613,31 @@ abstract class AppLocalizations {
   /// No description provided for @date.
   ///
   /// In en, this message translates to:
-  /// **'التاريخ'**
+  /// **'Date'**
   String get date;
 
   /// No description provided for @endTime.
   ///
   /// In en, this message translates to:
-  /// **'وقت الانتهاء'**
+  /// **'End Time'**
   String get endTime;
 
   /// No description provided for @sessionTitle.
   ///
   /// In en, this message translates to:
-  /// **'عنوان الحصة'**
+  /// **'Session Title'**
   String get sessionTitle;
 
   /// No description provided for @startTime.
   ///
   /// In en, this message translates to:
-  /// **'وقت البدء'**
+  /// **'Start Time'**
   String get startTime;
 
   /// No description provided for @trainer.
   ///
   /// In en, this message translates to:
-  /// **'المدرب'**
+  /// **'Trainer'**
   String get trainer;
 
   /// No description provided for @trainings.
@@ -1089,6 +1089,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check In Item'**
   String get checkInItem;
+
+  /// No description provided for @checkOutItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Out Item'**
+  String get checkOutItem;
 
   /// No description provided for @notesOnReturn.
   ///
@@ -1569,6 +1575,192 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Move to Bottom'**
   String get moveToBottom;
+
+  /// No description provided for @userBannedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'⛔ Your account has been banned by the admin. Logging out.'**
+  String get userBannedMessage;
+
+  /// No description provided for @loginFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Login failed'**
+  String get loginFailed;
+
+  /// No description provided for @signupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Signup failed'**
+  String get signupFailed;
+
+  /// No description provided for @connectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection error'**
+  String get connectionError;
+
+  /// No description provided for @apiError.
+  ///
+  /// In en, this message translates to:
+  /// **'API Error'**
+  String get apiError;
+
+  /// No description provided for @trainingsLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Level {level} Trainings'**
+  String trainingsLevel(Object level);
+
+  /// No description provided for @trainingsAvailableLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Available Trainings (up to level {level})'**
+  String trainingsAvailableLevel(Object level);
+
+  /// No description provided for @traineeLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Trainee Level'**
+  String get traineeLevel;
+
+  /// No description provided for @level1Beginner.
+  ///
+  /// In en, this message translates to:
+  /// **'Level 1 (Beginner)'**
+  String get level1Beginner;
+
+  /// No description provided for @level2Intermediate.
+  ///
+  /// In en, this message translates to:
+  /// **'Level 2 (Intermediate)'**
+  String get level2Intermediate;
+
+  /// No description provided for @level3Advanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Level 3 (Advanced)'**
+  String get level3Advanced;
+
+  /// No description provided for @unitType.
+  ///
+  /// In en, this message translates to:
+  /// **'Unit Type'**
+  String get unitType;
+
+  /// No description provided for @notSpecified.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Specified'**
+  String get notSpecified;
+
+  /// No description provided for @liwa.
+  ///
+  /// In en, this message translates to:
+  /// **'Brigades'**
+  String get liwa;
+
+  /// No description provided for @markazia.
+  ///
+  /// In en, this message translates to:
+  /// **'Central'**
+  String get markazia;
+
+  /// No description provided for @responsibleTrainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Responsible Trainer'**
+  String get responsibleTrainer;
+
+  /// No description provided for @noTrainer.
+  ///
+  /// In en, this message translates to:
+  /// **'No Trainer'**
+  String get noTrainer;
+
+  /// No description provided for @userDataUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'User data and level updated successfully'**
+  String get userDataUpdated;
+
+  /// No description provided for @updateRequiredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Mandatory Update Required'**
+  String get updateRequiredTitle;
+
+  /// No description provided for @updateRequiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your current version is too old. To ensure best performance and new features, please update the app now.'**
+  String get updateRequiredMessage;
+
+  /// No description provided for @updateNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Now'**
+  String get updateNow;
+
+  /// No description provided for @contactDeveloperForUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Request update from developer (Shami)'**
+  String get contactDeveloperForUpdate;
+
+  /// No description provided for @oldVersionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your current version is outdated and has stopped working. Please get the latest version to continue.'**
+  String get oldVersionMessage;
+
+  /// No description provided for @contactDeveloperTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact Developer'**
+  String get contactDeveloperTitle;
+
+  /// No description provided for @developerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer: Shami'**
+  String get developerName;
+
+  /// No description provided for @contactInfoMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'To get the latest updates, report a problem, or make suggestions, feel free to contact me directly.'**
+  String get contactInfoMessage;
+
+  /// No description provided for @contactViaWhatsapp.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact via WhatsApp'**
+  String get contactViaWhatsapp;
+
+  /// No description provided for @scanQrCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Or scan the QR code for quick contact'**
+  String get scanQrCode;
+
+  /// No description provided for @scanQrInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan the code using your phone camera'**
+  String get scanQrInstruction;
+
+  /// No description provided for @generalSupervisor.
+  ///
+  /// In en, this message translates to:
+  /// **'General Supervisor'**
+  String get generalSupervisor;
+
+  /// No description provided for @madeBy.
+  ///
+  /// In en, this message translates to:
+  /// **'v1.0.0 • Made with ❤️ by Shami'**
+  String get madeBy;
 }
 
 class _AppLocalizationsDelegate

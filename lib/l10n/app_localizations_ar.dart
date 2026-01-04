@@ -509,6 +509,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get checkInItem => 'إرجاع القطعة';
 
   @override
+  String get checkOutItem => 'سحب صنف';
+
+  @override
   String get notesOnReturn =>
       'ملاحظات عند الإرجاع (مثال: البطارية ضعيفة، كسر بسيط...)';
 
@@ -546,7 +549,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get totalQuantity => 'الكمية الإجمالية';
 
   @override
-  String get availableQuantity => 'Available Quantity';
+  String get availableQuantity => 'الكمية المتاحة';
 
   @override
   String get noInventoryItems => 'لا توجد قطع في المخزون.';
@@ -752,4 +755,105 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get moveToBottom => 'نقل للأسفل';
+
+  @override
+  String get userBannedMessage =>
+      '⛔ تم حظر حسابك من قبل الإدارة. تم تسجيل الخروج.';
+
+  @override
+  String get loginFailed => 'فشل تسجيل الدخول';
+
+  @override
+  String get signupFailed => 'فشل إنشاء الحساب';
+
+  @override
+  String get connectionError => 'خطأ في الاتصال';
+
+  @override
+  String get apiError => 'خطأ في النظام';
+
+  @override
+  String trainingsLevel(Object level) {
+    return 'تدريبات المستوى $level';
+  }
+
+  @override
+  String trainingsAvailableLevel(Object level) {
+    return 'التدريبات المتاحة (حتى مستوى $level)';
+  }
+
+  @override
+  String get traineeLevel => 'مستوى المتدرب';
+
+  @override
+  String get level1Beginner => 'المستوى 1 (مبتدئ)';
+
+  @override
+  String get level2Intermediate => 'المستوى 2 (متوسط)';
+
+  @override
+  String get level3Advanced => 'المستوى 3 (متقدم)';
+
+  @override
+  String get unitType => 'نوع الوحدة';
+
+  @override
+  String get notSpecified => 'غير محدد';
+
+  @override
+  String get liwa => 'ألوية';
+
+  @override
+  String get markazia => 'مركزية';
+
+  @override
+  String get responsibleTrainer => 'المدرب المسؤول';
+
+  @override
+  String get noTrainer => 'بدون مدرب';
+
+  @override
+  String get userDataUpdated => 'تم تحديث البيانات والمستوى بنجاح';
+
+  @override
+  String get updateRequiredTitle => 'تحديث إجباري مطلوب';
+
+  @override
+  String get updateRequiredMessage =>
+      'إصدارك الحالي قديم جداً. لضمان أفضل أداء وميزات جديدة، يرجى تحديث التطبيق الآن.';
+
+  @override
+  String get updateNow => 'تحديث الآن';
+
+  @override
+  String get contactDeveloperForUpdate => 'اطلب التحديث من المطور (شامي)';
+
+  @override
+  String get oldVersionMessage =>
+      'نسختك الحالية قديمة وتوقفت عن العمل. يرجى الحصول على أحدث نسخة للمتابعة.';
+
+  @override
+  String get contactDeveloperTitle => 'تواصل مع المطور';
+
+  @override
+  String get developerName => 'المطور: شامي';
+
+  @override
+  String get contactInfoMessage =>
+      'للحصول على آخر التحديثات، الإبلاغ عن مشكلة، أو تقديم اقتراحات، لا تتردد في التواصل معي مباشرة.';
+
+  @override
+  String get contactViaWhatsapp => 'تواصل عبر واتساب';
+
+  @override
+  String get scanQrCode => 'أو امسح الباركود للتواصل السريع';
+
+  @override
+  String get scanQrInstruction => 'امسح الرمز باستخدام كاميرا هاتفك';
+
+  @override
+  String get generalSupervisor => 'المشرف العام';
+
+  @override
+  String get madeBy => 'v1.0.0 • Made with ❤️ by Shami';
 }

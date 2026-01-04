@@ -2,7 +2,9 @@ import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cropperx/cropperx.dart';
+import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/widgets/language_selector.dart';
 import 'package:drone_academy/widgets/loading_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -36,8 +38,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _recommendationController = TextEditingController();
 
   // --- الحقول الجديدة (Dropdowns) ---
-  String? _selectedMaritalStatus; // متزوج / أعزب
-  String? _selectedUnitType; // ألوية / مركزية
+  String? _selectedMaritalStatus;
+  String? _selectedUnitType;
 
   Map<String, dynamic>? _user;
   String? _photoUrl;
@@ -83,9 +85,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _telegramController.text = data['telegram'] ?? '';
           _recommendationController.text = data['recommendation'] ?? '';
 
-          // تحميل القيم المختارة
-          _selectedMaritalStatus = data['maritalStatus'];
-          _selectedUnitType = data['unitType'];
+          // [تصحيح الخطأ هنا] ✅
+          // التحقق من القيم القادمة من السيرفر: إذا كانت نصاً فارغاً، نحولها لـ null
+          // لكي لا ينهار الـ DropdownButton
+
+          String? ms = data['maritalStatus'];
+          if (ms != null &&
+              (ms.isEmpty || !['single', 'married'].contains(ms))) {
+            ms = null;
+          }
+          _selectedMaritalStatus = ms;
+
+          String? ut = data['unitType'];
+          if (ut != null &&
+              (ut.isEmpty || !['liwa', 'markazia'].contains(ut))) {
+            ut = null;
+          }
+          _selectedUnitType = ut;
 
           _isLoading = false;
         });
@@ -96,6 +112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickAndUploadImage() async {
+    final l10n = AppLocalizations.of(context)!;
     final imagePicker = ImagePicker();
     final pickedFile = await imagePicker.pickImage(
       source: ImageSource.gallery,
@@ -104,6 +121,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (pickedFile == null) return;
     final imageBytes = await pickedFile.readAsBytes();
     if (!mounted) return;
+
+    // شاشة القص
     final Uint8List? croppedBytes = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -111,6 +130,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: Colors.black,
           appBar: AppBar(
             backgroundColor: Colors.black,
+            title: Text(
+              l10n.cropImage,
+              style: const TextStyle(color: Colors.white),
+            ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.check, color: Colors.white),
@@ -153,13 +176,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _photoUrl = url;
           _isUploading = false;
         });
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l10n.profilePictureUpdated)));
+        }
       } catch (e) {
         setState(() => _isUploading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("${l10n.failed}: $e")));
+        }
       }
     }
   }
 
   Future<void> _saveProfile() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_user != null) {
       final uid = _user!['uid'] ?? _user!['id'];
 
@@ -179,7 +213,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'whatsapp': _whatsappController.text,
         'telegram': _telegramController.text,
         'recommendation': _recommendationController.text,
-        // الحقول الجديدة
         'maritalStatus': _selectedMaritalStatus ?? '',
         'unitType': _selectedUnitType ?? '',
       };
@@ -193,14 +226,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم الحفظ بنجاح!')));
+        ).showSnackBar(SnackBar(content: Text(l10n.saveChanges)));
         Navigator.of(context).pop();
       }
     }
   }
 
   Future<void> _logout() async {
+    final l10n = AppLocalizations.of(context)!;
     if (!mounted) return;
+
     await _apiService.logout();
     await FirebaseAuth.instance.signOut();
     if (mounted) {
@@ -210,16 +245,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_isLoading) {
-      return const LoadingView(message: "جاري تحضير الصفحة...");
+      return LoadingView(message: l10n.loading);
     }
+
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
         backgroundColor: _bgColor,
-        title: const Text(
-          "تعديل الملف الشخصي",
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          l10n.editProfile,
+          style: const TextStyle(color: Colors.white),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -268,10 +306,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 30),
 
+            // اختيار اللغة
+            const LanguageSelector(showTitle: true, isCompact: false),
+            const SizedBox(height: 30),
+
             _buildSectionTitle("المعلومات الأساسية"),
             _buildTextField(
               icon: Icons.person,
-              label: "الاسم الثلاثي",
+              label: l10n.fullName,
               controller: _nameController,
             ),
             _buildTextField(
@@ -280,14 +322,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               controller: _militaryNumController,
             ),
 
-            // --- اختيار نوع الوحدة (ألوية / مركزية) ---
+            // --- اختيار نوع الوحدة ---
             _buildDropdownField(
               icon: Icons.flag,
-              label: "نوع الوحدة (التصنيف)",
+              label: l10n.unitType,
               value: _selectedUnitType,
-              items: const [
-                DropdownMenuItem(value: 'liwa', child: Text('ألوية')),
-                DropdownMenuItem(value: 'markazia', child: Text('مركزية')),
+              items: [
+                DropdownMenuItem(value: 'liwa', child: Text(l10n.liwa)),
+                DropdownMenuItem(value: 'markazia', child: Text(l10n.markazia)),
               ],
               onChanged: (val) => setState(() => _selectedUnitType = val),
             ),
@@ -388,9 +430,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
-                  "حفظ التغييرات",
-                  style: TextStyle(
+                child: Text(
+                  l10n.saveChanges,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -402,9 +444,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             OutlinedButton.icon(
               onPressed: _logout,
               icon: const Icon(Icons.logout, color: Colors.red),
-              label: const Text(
-                "تسجيل الخروج",
-                style: TextStyle(color: Colors.red),
+              label: Text(
+                l10n.logout,
+                style: const TextStyle(color: Colors.red),
               ),
             ),
             const SizedBox(height: 40),

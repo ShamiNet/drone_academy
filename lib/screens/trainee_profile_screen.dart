@@ -197,6 +197,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
     final creatorName = currentUser?.displayName ?? 'Trainer';
 
     bool showWatermark = true;
+    String selectedLanguage = 'ar';
     bool proceed = false;
     await showDialog(
       context: context,
@@ -207,14 +208,81 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
           style: TextStyle(color: Colors.white),
         ),
         content: StatefulBuilder(
-          builder: (c, st) => SwitchListTile(
-            title: const Text(
-              'إظهار العلامة المائية',
-              style: TextStyle(color: Colors.white),
-            ),
-            value: showWatermark,
-            activeColor: const Color(0xFF8FA1B4),
-            onChanged: (val) => st(() => showWatermark = val),
+          builder: (c, st) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // اختيار اللغة
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF8FA1B4)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'لغة التقرير',
+                      style: TextStyle(color: Color(0xFF8FA1B4), fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButton<String>(
+                      value: selectedLanguage,
+                      isExpanded: true,
+                      dropdownColor: const Color(0xFF1E2230),
+                      style: const TextStyle(color: Colors.white),
+                      underline: Container(),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'ar',
+                          child: Row(
+                            children: [
+                              Text('🇸🇦', style: TextStyle(fontSize: 20)),
+                              SizedBox(width: 8),
+                              Text('العربية'),
+                            ],
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'en',
+                          child: Row(
+                            children: [
+                              Text('🇬🇧', style: TextStyle(fontSize: 20)),
+                              SizedBox(width: 8),
+                              Text('English'),
+                            ],
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'ru',
+                          child: Row(
+                            children: [
+                              Text('🇷🇺', style: TextStyle(fontSize: 20)),
+                              SizedBox(width: 8),
+                              Text('Русский'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) => st(() => selectedLanguage = val!),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text(
+                  'إظهار العلامة المائية',
+                  style: TextStyle(color: Colors.white),
+                ),
+                value: showWatermark,
+                activeColor: const Color(0xFF8FA1B4),
+                onChanged: (val) => st(() => showWatermark = val),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -302,11 +370,16 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
         aiSummary: aiSummary,
         levelProgress: levelProgress,
         averageMastery: _averageMasteryPercentage,
+        language: selectedLanguage,
       );
 
       if (mounted) {
         Navigator.pop(context);
-        showReportReadyDialog(context, pdfDoc);
+        // تأخير صغير للسماح للـ Navigator بإغلاق النافذة السابقة بشكل كامل
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (mounted) {
+          showReportReadyDialog(context, pdfDoc);
+        }
       }
     } catch (e) {
       if (mounted) {

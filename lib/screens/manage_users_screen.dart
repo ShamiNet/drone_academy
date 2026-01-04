@@ -20,19 +20,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   String _searchQuery = '';
   String _selectedRoleFilter = 'All';
   String _selectedManagerFilter = 'All';
-  String _selectedUnitFilter = 'All'; // فلتر الوحدات الجديد
+  String _selectedUnitFilter = 'All';
 
   final Color _bgColor = const Color(0xFF111318);
   final Color _cardColor = const Color(0xFF1E2230);
   final Color _orangeColor = const Color(0xFFFF9800);
 
-  // ألوان التمييز للوحدات
   Color _getUnitColor(String? unitType) {
-    if (unitType == 'markazia')
-      return const Color(0xFF9C27B0); // بنفسجي للمركزية
-    if (unitType == 'liwa')
-      return const Color(0xFF009688); // تيفاني/أخضر للألوية
-    return _cardColor; // الافتراضي
+    if (unitType == 'markazia') return const Color(0xFF9C27B0);
+    if (unitType == 'liwa') return const Color(0xFF009688);
+    return _cardColor;
   }
 
   Color _getRoleColor(String role) {
@@ -50,7 +47,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  // ... (نفس دوال الأيقونات والتسميات السابقة)
   IconData _getRoleIcon(String role) {
     switch (role.toLowerCase()) {
       case 'owner':
@@ -66,16 +62,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  String _getRoleLabel(String role) {
+  String _getRoleLabel(String role, AppLocalizations l10n) {
     switch (role.toLowerCase()) {
       case 'owner':
-        return 'المدير العام';
+        return l10n.generalSupervisor; // ✅ تم التغيير لاستدعاء "المشرف العام"
       case 'admin':
-        return 'المدراء';
+        return l10n.admin;
       case 'trainer':
-        return 'المدربين';
+        return l10n.trainers;
       case 'trainee':
-        return 'المتدربين';
+        return l10n.trainees;
       default:
         return role;
     }
@@ -115,7 +111,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  // دالة جديدة لفتح البروفايل (معلومات شخصية)
   void _navigateToUserProfileInfo(Map<String, dynamic> user) {
     Navigator.push(
       context,
@@ -126,7 +121,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  // دالة لفتح تفاصيل التدريب (الوضع الافتراضي)
   void _navigateToTrainingDetails(Map<String, dynamic> user) {
     Navigator.push(
       context,
@@ -172,7 +166,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             bool matchesManager =
                 _selectedManagerFilter == 'All' ||
                 parentId == _selectedManagerFilter;
-            // شرط فلتر الوحدات
             bool matchesUnit =
                 _selectedUnitFilter == 'All' || unitType == _selectedUnitFilter;
 
@@ -190,7 +183,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
           return Column(
             children: [
-              // --- قسم البحث والفلترة ---
               Container(
                 padding: const EdgeInsets.all(16.0),
                 color: _bgColor,
@@ -199,7 +191,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     TextField(
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'بحث عن مستخدم...',
+                        hintText: l10n.searchTrainee,
                         hintStyle: const TextStyle(color: Colors.grey),
                         prefixIcon: const Icon(
                           Icons.search,
@@ -224,23 +216,30 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                             width: 120,
                             child: _buildDropdownFilter(
                               value: _selectedRoleFilter,
-                              label: 'الدور',
-                              items: const [
+                              label: l10n.role,
+                              items: [
                                 DropdownMenuItem(
                                   value: 'All',
-                                  child: Text('الكل'),
+                                  child: Text(l10n.all),
+                                ),
+                                // ✅ تم إضافة هذا الخيار لتجنب المشاكل في الفلترة أيضاً
+                                DropdownMenuItem(
+                                  value: 'owner',
+                                  child: Text(
+                                    l10n.generalSupervisor,
+                                  ), // ✅ "المشرف العام"
                                 ),
                                 DropdownMenuItem(
                                   value: 'admin',
-                                  child: Text('المدراء'),
+                                  child: Text(l10n.admin),
                                 ),
                                 DropdownMenuItem(
                                   value: 'trainer',
-                                  child: Text('المدربين'),
+                                  child: Text(l10n.trainers),
                                 ),
                                 DropdownMenuItem(
                                   value: 'trainee',
-                                  child: Text('المتدربين'),
+                                  child: Text(l10n.trainees),
                                 ),
                               ],
                               onChanged: (val) =>
@@ -248,24 +247,23 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // --- فلتر الوحدات الجديد ---
                           SizedBox(
                             width: 130,
                             child: _buildDropdownFilter(
                               value: _selectedUnitFilter,
-                              label: 'الوحدة',
-                              items: const [
+                              label: l10n.unitType,
+                              items: [
                                 DropdownMenuItem(
                                   value: 'All',
-                                  child: Text('كل الوحدات'),
+                                  child: Text(l10n.all),
                                 ),
                                 DropdownMenuItem(
                                   value: 'liwa',
-                                  child: Text('ألوية'),
+                                  child: Text(l10n.liwa),
                                 ),
                                 DropdownMenuItem(
                                   value: 'markazia',
-                                  child: Text('مركزية'),
+                                  child: Text(l10n.markazia),
                                 ),
                               ],
                               onChanged: (val) =>
@@ -306,8 +304,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   ],
                 ),
               ),
-
-              // --- القائمة ---
               Expanded(
                 child: filteredUsers.isEmpty
                     ? Center(
@@ -327,12 +323,10 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           final Color roleColor = _getRoleColor(role);
                           final String unitType = user['unitType'] ?? '';
 
-                          // لون البطاقة حسب الوحدة
                           final Color cardBackground = unitType.isNotEmpty
                               ? _getUnitColor(unitType).withOpacity(0.15)
                               : _cardColor;
 
-                          // لون الحدود (Border) لزيادة الوضوح
                           final Color borderColor = unitType.isNotEmpty
                               ? _getUnitColor(unitType).withOpacity(0.5)
                               : Colors.transparent;
@@ -438,8 +432,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                         ),
                                         child: Text(
                                           unitType == 'liwa'
-                                              ? 'ألوية'
-                                              : 'مركزية',
+                                              ? l10n.liwa
+                                              : l10n.markazia,
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 10,
@@ -472,7 +466,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      _getRoleLabel(role),
+                                      _getRoleLabel(role, l10n),
                                       style: TextStyle(
                                         color: roleColor,
                                         fontSize: 10,
@@ -483,11 +477,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                 ),
                               ),
                               onTap: () => _navigateToUserProfile(user),
-                              onLongPress: () => _showUserOptions(
-                                context,
-                                user,
-                                allUsers,
-                              ), // _showUserOptions same as before
+                              onLongPress: () =>
+                                  _showUserOptions(context, user, allUsers),
                             ),
                           );
                         },
@@ -508,14 +499,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  // ... (بقية الدوال المساعدة مثل _showUserOptions, _showEditUserDialog, _showSelectParentDialog تبقى كما هي)
   void _showUserOptions(
     BuildContext context,
     Map<String, dynamic> user,
     List<dynamic> allUsers,
   ) {
-    // ... Copy implementation from original file if needed, keeping it standard
-    // For brevity, assuming standard implementation exists in the full file context
     final l10n = AppLocalizations.of(context)!;
     final bool isBlocked = user['isBlocked'] == true;
 
@@ -532,7 +520,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                user['displayName'] ?? 'User',
+                user['displayName'] ?? l10n.users,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -590,20 +578,19 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   void _showEditUserDialog(Map<String, dynamic> user, List<dynamic> allUsers) {
+    final l10n = AppLocalizations.of(context)!;
     String currentRole = user['role'] ?? 'trainee';
     String? currentParentId = user['parentId'];
     String? currentUnitType = user['unitType'];
 
-    // [جديد] جلب المستوى الحالي (الافتراضي 1)
     int currentLevel = int.tryParse(user['level'].toString()) ?? 1;
 
     final userId = user['id'] ?? user['uid'];
 
-    // منطق اختيار المدرب المسؤول (كما هو)
     if (currentParentId != null && currentParentId.isEmpty) {
       currentParentId = null;
     }
-    String currentParentName = 'بدون مدرب';
+    String currentParentName = l10n.noTrainer;
     if (currentParentId != null) {
       final parent = allUsers.firstWhere(
         (u) => (u['id'] ?? u['uid']) == currentParentId,
@@ -623,20 +610,19 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: const Color(0xFF1E2230),
-              title: const Text(
-                "تعديل المستخدم",
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                l10n.editProfile,
+                style: const TextStyle(color: Colors.white),
               ),
               content: SingleChildScrollView(
-                // إضافة سكرول لتجنب مشاكل المساحة
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. قائمة الدور (Role)
-                    const Text(
-                      "الدور:",
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    // 1. الدور
+                    Text(
+                      l10n.role,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     DropdownButton<String>(
                       value: currentRole,
@@ -644,18 +630,27 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       dropdownColor: const Color(0xFF2C2C2C),
                       style: const TextStyle(color: Colors.white),
                       underline: Container(height: 1, color: Colors.grey),
-                      items: const [
+                      items: [
+                        // ✅ تم إضافة الشرط هنا: إذا كان الدور owner، أظهر الخيار owner
+                        // ✅ تعديل اسم الاونر في القائمة
+                        if (currentRole == 'owner')
+                          DropdownMenuItem(
+                            value: 'owner',
+                            child: Text(
+                              l10n.generalSupervisor,
+                            ), // "المشرف العام"
+                          ),
                         DropdownMenuItem(
                           value: 'admin',
-                          child: Text('المدراء'),
+                          child: Text(l10n.admin),
                         ),
                         DropdownMenuItem(
                           value: 'trainer',
-                          child: Text('المدربين'),
+                          child: Text(l10n.trainers),
                         ),
                         DropdownMenuItem(
                           value: 'trainee',
-                          child: Text('المتدربين'),
+                          child: Text(l10n.trainees),
                         ),
                       ],
                       onChanged: (val) =>
@@ -663,11 +658,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 2. [جديد] قائمة المستوى (تظهر فقط للمتدربين)
+                    // 2. المستوى
                     if (currentRole == 'trainee') ...[
-                      const Text(
-                        "مستوى المتدرب:",
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      Text(
+                        l10n.traineeLevel,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
                       ),
                       DropdownButton<int>(
                         value: currentLevel,
@@ -675,18 +673,18 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         dropdownColor: const Color(0xFF2C2C2C),
                         style: const TextStyle(color: Colors.white),
                         underline: Container(height: 1, color: Colors.grey),
-                        items: const [
+                        items: [
                           DropdownMenuItem(
                             value: 1,
-                            child: Text('المستوى 1 (مبتدئ)'),
+                            child: Text(l10n.level1Beginner),
                           ),
                           DropdownMenuItem(
                             value: 2,
-                            child: Text('المستوى 2 (متوسط)'),
+                            child: Text(l10n.level2Intermediate),
                           ),
                           DropdownMenuItem(
                             value: 3,
-                            child: Text('المستوى 3 (متقدم)'),
+                            child: Text(l10n.level3Advanced),
                           ),
                         ],
                         onChanged: (val) =>
@@ -695,27 +693,30 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       const SizedBox(height: 16),
                     ],
 
-                    // 3. قائمة نوع الوحدة (Unit Type)
-                    const Text(
-                      "نوع الوحدة:",
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    // 3. نوع الوحدة
+                    Text(
+                      l10n.unitType,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     DropdownButton<String>(
                       value: currentUnitType,
                       isExpanded: true,
-                      hint: const Text(
-                        "غير محدد",
-                        style: TextStyle(color: Colors.grey),
+                      hint: Text(
+                        l10n.notSpecified,
+                        style: const TextStyle(color: Colors.grey),
                       ),
                       dropdownColor: const Color(0xFF2C2C2C),
                       style: const TextStyle(color: Colors.white),
                       underline: Container(height: 1, color: Colors.grey),
-                      items: const [
-                        DropdownMenuItem(value: null, child: Text('غير محدد')),
-                        DropdownMenuItem(value: 'liwa', child: Text('ألوية')),
+                      items: [
+                        DropdownMenuItem(
+                          value: null,
+                          child: Text(l10n.notSpecified),
+                        ),
+                        DropdownMenuItem(value: 'liwa', child: Text(l10n.liwa)),
                         DropdownMenuItem(
                           value: 'markazia',
-                          child: Text('مركزية'),
+                          child: Text(l10n.markazia),
                         ),
                       ],
                       onChanged: (val) =>
@@ -724,9 +725,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     const SizedBox(height: 16),
 
                     // 4. المدرب المسؤول
-                    const Text(
-                      "المدرب المسؤول:",
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    Text(
+                      l10n.responsibleTrainer,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     InkWell(
                       onTap: () async {
@@ -771,32 +772,31 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text(
-                    "إلغاء",
-                    style: TextStyle(color: Colors.grey),
+                  child: Text(
+                    l10n.cancel,
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    // حفظ البيانات بما فيها المستوى الجديد
                     await _apiService.updateUser({
                       'uid': userId,
                       'role': currentRole,
                       'parentId': currentParentId ?? '',
                       'unitType': currentUnitType ?? '',
-                      'level': currentLevel, // [تمت الإضافة]
+                      'level': currentLevel,
                     });
                     if (mounted) {
                       Navigator.pop(ctx);
                       showCustomSnackBar(
                         context,
-                        "تم تحديث البيانات والمستوى بنجاح",
+                        l10n.userDataUpdated,
                         isError: false,
                       );
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                  child: const Text("حفظ"),
+                  child: Text(l10n.save),
                 ),
               ],
             );
@@ -810,7 +810,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     List<dynamic> allUsers,
     String currentUserId,
   ) async {
-    // ... (Same as original)
+    final l10n = AppLocalizations.of(context)!;
     final potentialParents = allUsers
         .where((u) => (u['id'] ?? u['uid']) != currentUserId)
         .toList();
@@ -833,9 +833,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
             return AlertDialog(
               backgroundColor: const Color(0xFF1E2230),
-              title: const Text(
-                "اختر المسؤول",
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                l10n.selectNewParent,
+                style: const TextStyle(color: Colors.white),
               ),
               content: SizedBox(
                 width: double.maxFinite,
@@ -845,10 +845,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     TextField(
                       controller: searchCtrl,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: "بحث...",
-                        hintStyle: TextStyle(color: Colors.grey),
-                        prefixIcon: Icon(Icons.search, color: Colors.grey),
+                      decoration: InputDecoration(
+                        hintText: l10n.lookup,
+                        hintStyle: const TextStyle(color: Colors.grey),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                        ),
                       ),
                       onChanged: (v) => setModalState(() {}),
                     ),
@@ -858,16 +861,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         backgroundColor: Colors.grey,
                         child: Icon(Icons.highlight_off, color: Colors.white),
                       ),
-                      title: const Text(
-                        "بدون مدرب (مستوى أعلى)",
-                        style: TextStyle(
+                      title: Text(
+                        l10n.noTrainer,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       onTap: () => Navigator.pop(context, {
                         'id': null,
-                        'name': 'بدون مدرب',
+                        'name': l10n.noTrainer,
                       }),
                     ),
                     Expanded(
@@ -899,7 +902,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   void _toggleBlockStatus(Map<String, dynamic> user, bool shouldBlock) async {
-    // ... (Same as original)
+    final l10n = AppLocalizations.of(context)!;
     final success = await _apiService.updateUser({
       'uid': user['id'] ?? user['uid'],
       'isBlocked': shouldBlock,
@@ -908,8 +911,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       showCustomSnackBar(
         context,
         success
-            ? (shouldBlock ? 'تم حظر المستخدم' : 'تم تفعيل المستخدم')
-            : 'فشل العملية',
+            ? (shouldBlock ? l10n.userBlocked : l10n.userUnblocked)
+            : l10n.failed,
         isError: !success || shouldBlock,
       );
     }
@@ -920,7 +923,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     String? userName,
     AppLocalizations l10n,
   ) {
-    // ... (Same as original)
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -960,7 +962,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     required List<DropdownMenuItem<String>> items,
     required ValueChanged<String?> onChanged,
   }) {
-    // ... (Same as original)
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
       decoration: BoxDecoration(

@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/splash_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/services/language_service.dart';
 import 'package:drone_academy/services/notification_service.dart';
 import 'package:drone_academy/theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -59,6 +60,9 @@ void main() async {
   runApp(const MyApp());
 }
 
+// تصدير نوع MyAppState ليُستخدم في language_selector
+typedef MyAppState = _MyAppState;
+
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -69,6 +73,22 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   Locale? _locale;
   ThemeMode _themeMode = ThemeMode.system; // الوضع الافتراضي
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLanguage();
+  }
+
+  // تحميل اللغة المحفوظة
+  Future<void> _loadSavedLanguage() async {
+    final savedLocale = await LanguageService.getSavedLocale();
+    if (savedLocale != null && mounted) {
+      setState(() {
+        _locale = savedLocale;
+      });
+    }
+  }
 
   void setLocale(Locale locale) {
     setState(() {

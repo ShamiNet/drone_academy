@@ -10,6 +10,7 @@ import 'package:drone_academy/screens/user_blocking_screen.dart';
 import 'package:drone_academy/screens/user_org_chart_screen.dart';
 import 'package:drone_academy/services/export_service.dart';
 import 'package:drone_academy/utils/snackbar_helper.dart';
+import 'package:drone_academy/widgets/language_selector.dart';
 import 'package:flutter/material.dart';
 
 class AdminSettingsScreen extends StatelessWidget {
@@ -47,6 +48,10 @@ class AdminSettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // اختيار اللغة - في الأعلى
+          const LanguageSelector(showTitle: true, isCompact: false),
+          const SizedBox(height: 20),
+
           // القسم الأول: الهيكل التنظيمي
           _buildSectionHeader('الهيكل التنظيمي'),
           _buildSettingItem(
@@ -111,7 +116,7 @@ class AdminSettingsScreen extends StatelessWidget {
           _buildSectionHeader('حول التطبيق'),
           _buildSettingItem(
             title: 'رقم الإصدار',
-            subtitle: 'v1.0.0 (Stable)',
+            subtitle: 'v1.0.2 (Stable)',
             icon: Icons.info_outline,
             onTap: () {
               Navigator.push(

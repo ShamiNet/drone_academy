@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_settings_screen.dart';
-import 'package:drone_academy/screens/contact_developer_screen.dart'; // [إضافة] استيراد شاشة الدعم
+import 'package:drone_academy/screens/contact_developer_screen.dart';
 import 'package:drone_academy/screens/error_logs_screen.dart';
 import 'package:drone_academy/screens/manage_competitions_tab.dart';
 import 'package:drone_academy/screens/manage_equipment_screen.dart';
@@ -21,7 +21,6 @@ class ThemeService {
 }
 
 class AdminDashboard extends StatefulWidget {
-  // استقبال دالة تغيير الثيم
   final void Function(ThemeMode) setThemeMode;
 
   const AdminDashboard({super.key, required this.setThemeMode});
@@ -36,11 +35,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String? _displayName;
   String? _email;
 
-  // الألوان
   final Color _bgColor = const Color(0xFF111318);
   final Color _appBarColor = const Color(0xFF111318);
-  final Color _primaryColor = const Color(0xFFFF9800); // برتقالي
-  final Color _secondaryColor = const Color(0xFF3F51B5); // أزرق
+  final Color _primaryColor = const Color(0xFFFF9800);
+  final Color _secondaryColor = const Color(0xFF3F51B5);
 
   @override
   void initState() {
@@ -84,7 +82,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // [تعديل] دالة الانتقال للدعم
   void _goToSupport() {
     Navigator.push(
       context,
@@ -100,8 +97,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  // نافذة اختيار الثيم
   void _showThemeDialog() {
+    // هذه النصوص يمكن تعريبها أيضاً، لكن سأبقيها بسيطة الآن أو أستخدم الترجمة المتاحة
+    // يمكنك إضافة مفاتيح "themeSystem", "themeLight", "themeDark" في ملفات ARB لاحقاً
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E2230),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                "اختر مظهر التطبيق", // يمكن تعريبها: l10n.selectTheme
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 16),
+              // ... يمكنك بناء الخيارات هنا
+            ],
+          ),
+        );
+      },
+    );
+    // لإكمال الدالة كما في كودك الأصلي:
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E2230),
@@ -174,14 +200,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Scaffold(
         backgroundColor: _bgColor,
         drawer: _buildProfessionalDrawer(l10n),
-
         appBar: AppBar(
           backgroundColor: _appBarColor,
           elevation: 0,
           centerTitle: true,
-          title: const Text(
-            'الرئيسية',
-            style: TextStyle(
+          title: Text(
+            l10n.home, // "الرئيسية"
+            style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 20,
               color: Colors.white,
@@ -198,15 +223,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
             preferredSize: const Size.fromHeight(100),
             child: Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(
+                Padding(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 16.0,
                     vertical: 8.0,
                   ),
                   child: Text(
-                    'لوحة تحكم المدير',
+                    l10n.adminDashboard, // "لوحة تحكم المدير"
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -220,20 +245,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   indicatorColor: _primaryColor,
                   tabs: [
                     Tab(
-                      text: l10n.trainings,
+                      text: l10n.trainings, // "التدريبات"
                       icon: const Icon(Icons.model_training),
                     ),
                     Tab(
-                      text: l10n.competitions,
+                      text: l10n.competitions, // "المسابقات"
                       icon: const Icon(Icons.emoji_events),
                     ),
-                    Tab(text: l10n.users, icon: const Icon(Icons.people)),
                     Tab(
-                      text: l10n.equipment,
+                      text: l10n.users, // "المستخدمون"
+                      icon: const Icon(Icons.people),
+                    ),
+                    Tab(
+                      text: l10n.equipment, // "المعدات"
                       icon: const Icon(Icons.construction),
                     ),
                     Tab(
-                      text: l10n.inventory,
+                      text: l10n.inventory, // "المخزون"
                       icon: const Icon(Icons.inventory_2),
                     ),
                   ],
@@ -301,14 +329,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 style: TextStyle(color: Colors.grey.shade400),
               ),
             ),
-
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
                   _buildDrawerItem(
                     icon: Icons.person_outline,
-                    title: 'الملف الشخصي',
+                    title: l10n
+                        .editProfile, // "تعديل الملف الشخصي" (أو الملف الشخصي)
                     onTap: () {
                       Navigator.pop(context);
                       _goToProfile();
@@ -316,7 +344,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   _buildDrawerItem(
                     icon: Icons.settings_outlined,
-                    title: 'الإعدادات العامة',
+                    title: l10n.appControl, // "إعدادات التطبيق" (العامة)
                     onTap: () {
                       Navigator.pop(context);
                       _goToSettings();
@@ -324,30 +352,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   _buildDrawerItem(
                     icon: Icons.wb_sunny_outlined,
-                    title: 'المظهر (Theme)',
+                    title: "المظهر (Theme)", // يمكن تعريبها
                     onTap: () {
                       Navigator.pop(context);
                       _showThemeDialog();
                     },
                   ),
                   const Divider(color: Colors.grey),
-                  // [تعديل] ربط زر الدعم
                   _buildDrawerItem(
                     icon: Icons.help_outline,
-                    title: 'المساعدة والدعم',
+                    title: l10n
+                        .contactDeveloperTitle, // "تواصل مع المطور" أو الدعم
                     onTap: () {
                       Navigator.pop(context);
-                      _goToSupport(); // الانتقال لصفحة التواصل
+                      _goToSupport();
                     },
                   ),
-                  // مثال لإضافة الزر في Drawer المدير
                   ListTile(
                     leading: const Icon(
                       Icons.bug_report,
                       color: Colors.redAccent,
                     ),
                     title: const Text(
-                      "سجل الأخطاء (للمطور)",
+                      "سجل الأخطاء (للمطور)", // يمكن تعريبها
                       style: TextStyle(color: Colors.white),
                     ),
                     onTap: () {
@@ -363,12 +390,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ],
               ),
             ),
-
             Container(
               padding: const EdgeInsets.all(16),
               child: _buildDrawerItem(
                 icon: Icons.logout,
-                title: l10n.logout,
+                title: l10n.logout, // "تسجيل الخروج"
                 color: Colors.redAccent,
                 onTap: _logout,
               ),

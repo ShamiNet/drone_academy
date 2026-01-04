@@ -24,6 +24,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
     _refreshUserData();
   }
 
+  // دالة لجلب أحدث بيانات للمستخدم من السيرفر
   Future<void> _refreshUserData() async {
     try {
       final currentUid =
@@ -52,7 +53,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: bgColor,
-        // تغيير العنوان ليعكس أنه يعرض كل التدريبات حتى المستوى الحالي
+        // العنوان: التدريبات المتاحة (حتى مستوى X)
         title: _isLoadingUser
             ? const SizedBox(
                 height: 20,
@@ -60,7 +61,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Text(
-                "التدريبات المتاحة (حتى مستوى $_userLevel)",
+                l10n.trainingsAvailableLevel(_userLevel.toString()),
                 style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
         centerTitle: true,
@@ -104,8 +105,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
 
           final allTrainings = snapshot.data ?? [];
 
-          // 🔥 التعديل هنا: استخدام (<=) بدلاً من (==)
-          // هذا يعني: اعرض أي تمرين مستواه أقل من أو يساوي مستوى المتدرب
+          // 🔥 الفلترة: عرض التمارين التي مستواها <= مستوى المتدرب
           final filteredTrainings = allTrainings.where((training) {
             final trainingLevel =
                 int.tryParse(training['level'].toString()) ?? 1;
@@ -119,7 +119,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
             );
           }
 
-          // تجميع التمارين حسب المستوى لعرضها مرتبة
+          // تجميع التمارين حسب المستوى
           final Map<int, List<dynamic>> trainingsByLevel = {};
           for (var training in filteredTrainings) {
             final level = int.tryParse(training['level'].toString()) ?? 1;
@@ -137,8 +137,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
               final level = sortedLevels[index];
               final levelTrainings = trainingsByLevel[level]!;
 
-              // جعل القائمة مفتوحة فقط لأعلى مستوى وصل له المتدرب
-              // المستويات السابقة تكون مغلقة (اختياري، لترتيب الشكل)
+              // فتح المستوى الحالي تلقائياً
               final bool isCurrentLevel = (level == _userLevel);
 
               return Container(
@@ -146,7 +145,6 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E2230),
                   borderRadius: BorderRadius.circular(10),
-                  // تمييز بسيط للمستوى الحالي بإطار ملون
                   border: isCurrentLevel
                       ? Border.all(
                           color: const Color(0xFF3F51B5).withOpacity(0.5),
@@ -159,11 +157,10 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
                   ).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
                     title: Text(
-                      '${l10n.level} $level',
+                      '${l10n.level} $level', // عرض "المستوى X" حسب اللغة
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
-                        // تلوين عنوان المستوى الحالي لتمييزه
                         color: isCurrentLevel
                             ? const Color(0xFF64B5F6)
                             : Colors.white,
@@ -180,8 +177,7 @@ class _TraineeDashboardState extends State<TraineeDashboard> {
                     ),
                     collapsedIconColor: Colors.grey,
                     iconColor: const Color(0xFF8FA1B4),
-                    initiallyExpanded:
-                        isCurrentLevel, // فتح المستوى الحالي تلقائياً
+                    initiallyExpanded: isCurrentLevel,
                     children: levelTrainings.map((training) {
                       return TrainingCard(training: training);
                     }).toList(),

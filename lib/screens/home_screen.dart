@@ -40,7 +40,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // ✅ تفعيل مراقبة الحظر عند فتح الصفحة الرئيسية
+    ApiService().startUserStatusMonitoring(context);
     _loadUserData();
+  }
+
+  @override
+  void dispose() {
+    // ✅ إيقاف المراقبة عند إغلاق التطبيق
+    // (اختياري، لأن التطبيق سيغلق أصلاً، لكن جيد للنظافة البرمجية)
+    ApiService().stopMonitoring();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {

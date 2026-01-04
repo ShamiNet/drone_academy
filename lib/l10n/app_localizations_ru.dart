@@ -267,19 +267,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trainers => 'Тренеры';
 
   @override
-  String get date => 'التاريخ';
+  String get date => 'Дата';
 
   @override
-  String get endTime => 'وقت الانتهاء';
+  String get endTime => 'Время окончания';
 
   @override
-  String get sessionTitle => 'عنوان الحصة';
+  String get sessionTitle => 'Название сессии';
 
   @override
-  String get startTime => 'وقت البدء';
+  String get startTime => 'Время начала';
 
   @override
-  String get trainer => 'المدرب';
+  String get trainer => 'Тренер';
 
   @override
   String get trainings => 'Тренировки';
@@ -510,6 +510,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get checkInItem => 'Возврат оборудования';
+
+  @override
+  String get checkOutItem => 'Выдача оборудования';
 
   @override
   String get notesOnReturn =>
@@ -758,4 +761,107 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get moveToBottom => 'Переместить вниз';
+
+  @override
+  String get userBannedMessage =>
+      '⛔ Ваша учетная запись была заблокирована администратором. Выход из системы.';
+
+  @override
+  String get loginFailed => 'Вход не выполнен';
+
+  @override
+  String get signupFailed => 'Ошибка регистрации';
+
+  @override
+  String get connectionError => 'Ошибка соединения';
+
+  @override
+  String get apiError => 'Ошибка API';
+
+  @override
+  String trainingsLevel(Object level) {
+    return 'Тренировки уровня $level';
+  }
+
+  @override
+  String trainingsAvailableLevel(Object level) {
+    return 'Доступные тренировки (до уровня $level)';
+  }
+
+  @override
+  String get traineeLevel => 'Уровень стажера';
+
+  @override
+  String get level1Beginner => 'Уровень 1 (Начинающий)';
+
+  @override
+  String get level2Intermediate => 'Уровень 2 (Средний)';
+
+  @override
+  String get level3Advanced => 'Уровень 3 (Продвинутый)';
+
+  @override
+  String get unitType => 'Тип подразделения';
+
+  @override
+  String get notSpecified => 'Не указано';
+
+  @override
+  String get liwa => 'Бригады';
+
+  @override
+  String get markazia => 'Центральный';
+
+  @override
+  String get responsibleTrainer => 'Ответственный тренер';
+
+  @override
+  String get noTrainer => 'Без тренера';
+
+  @override
+  String get userDataUpdated =>
+      'Данные пользователя и уровень успешно обновлены';
+
+  @override
+  String get updateRequiredTitle => 'Требуется обязательное обновление';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ваша текущая версия устарела. Для лучшей производительности и новых функций, пожалуйста, обновите приложение сейчас.';
+
+  @override
+  String get updateNow => 'Обновить сейчас';
+
+  @override
+  String get contactDeveloperForUpdate =>
+      'Запросить обновление у разработчика (Shami)';
+
+  @override
+  String get oldVersionMessage =>
+      'Ваша текущая версия устарела и перестала работать. Пожалуйста, получите последнюю версию, чтобы продолжить.';
+
+  @override
+  String get contactDeveloperTitle => 'Связаться с разработчиком';
+
+  @override
+  String get developerName => 'Разработчик: Shami';
+
+  @override
+  String get contactInfoMessage =>
+      'Чтобы получить последние обновления, сообщить о проблеме или внести предложения, не стесняйтесь обращаться ко мне напрямую.';
+
+  @override
+  String get contactViaWhatsapp => 'Связаться через WhatsApp';
+
+  @override
+  String get scanQrCode => 'Или сканируйте QR-код для быстрой связи';
+
+  @override
+  String get scanQrInstruction => 'Сканируйте код с помощью камеры телефона';
+
+  @override
+  String get generalSupervisor => 'Генеральный куратор';
+
+  @override
+  String get madeBy => 'v1.0.0 • Сделано с ❤️ Shami';
 }

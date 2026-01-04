@@ -6,11 +6,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart'; // ضروري للـ Navigator و Scaffold
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
+
+  // متغير التايمر الخاص بفحص الحظر
+  Timer? _statusCheckTimer;
 
   // تأكد من أن هذا الرابط صحيح ويعمل
   final String baseUrl = 'http://qaaz.live:3000/api';
@@ -19,7 +23,79 @@ class ApiService {
   static Map<String, dynamic>? currentUser;
   static const String _userKey = 'cached_user_data';
 
-  // --- دوال التسجيل (Logging) ---
+  // ===========================================================================
+  // نظام مراقبة حالة المستخدم (الحظر)
+  // ===========================================================================
+
+  // دالة لبدء مراقبة حالة المستخدم (هل تم حظره؟)
+  void startUserStatusMonitoring(BuildContext context) {
+    _statusCheckTimer?.cancel();
+
+    // فحص كل 10 ثواني
+    _statusCheckTimer = Timer.periodic(const Duration(seconds: 10), (
+      timer,
+    ) async {
+      final user = currentUser;
+      if (user == null) return; // لا يوجد مستخدم
+
+      final uid = user['uid'] ?? user['id'];
+      if (uid == null) return;
+
+      try {
+        // جلب أحدث بيانات للمستخدم من السيرفر
+        final freshData = await fetchUser(uid);
+
+        if (freshData != null) {
+          // التحقق من الحظر
+          if (freshData['isBlocked'] == true) {
+            _log("SECURITY", "User is banned! Logging out...");
+
+            // إيقاف التايمر
+            timer.cancel();
+
+            // تسجيل الخروج
+            await logout();
+
+            // توجيه المستخدم لشاشة الدخول (إذا كان التطبيق مفتوحاً)
+            if (context.mounted) {
+              // افتراض أن '/' هو مسار شاشة تسجيل الدخول أو AuthGate
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/', (route) => false);
+
+              // عرض رسالة
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    "⛔ تم حظر حسابك من قبل الإدارة. تم تسجيل الخروج.",
+                  ),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 5),
+                ),
+              );
+            }
+          } else {
+            // تحديث البيانات في الذاكرة (مثلاً لو تغير المستوى أو الاسم)
+            currentUser = freshData;
+            // حفظ التحديث
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_userKey, json.encode(freshData));
+          }
+        }
+      } catch (e) {
+        print("Error checking user status: $e");
+      }
+    });
+  }
+
+  // إيقاف المراقبة عند الخروج
+  void stopMonitoring() {
+    _statusCheckTimer?.cancel();
+  }
+
+  // ===========================================================================
+  // دوال التسجيل (Logging)
+  // ===========================================================================
 
   void _log(String tag, String message) {
     print("🚀 [API][$tag] $message");
@@ -265,6 +341,7 @@ class ApiService {
   Future<void> logout() async {
     try {
       _log("LOGOUT", "Clearing session...");
+      stopMonitoring(); // ✅ إيقاف المراقبة عند الخروج
       currentUser = null;
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
@@ -295,7 +372,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>?> fetchUser(String uid) async {
-    _log("FETCH_USER", "Requesting user data for UID: $uid");
+    // _log("FETCH_USER", "Requesting user data for UID: $uid"); // تعليق لتخفيف السجلات
     try {
       final response = await http.get(Uri.parse('$baseUrl/users/$uid'));
       if (response.statusCode == 200) {
