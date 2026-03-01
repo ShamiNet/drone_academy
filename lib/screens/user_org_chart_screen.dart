@@ -52,7 +52,7 @@ class _UserOrgChartScreenState extends State<UserOrgChartScreen> {
 
   void _refreshChart() {
     setState(() {
-      _futureUsers = _apiService.fetchUsers();
+      _futureUsers = _apiService.getUsers(forceRefresh: true);
     });
   }
 

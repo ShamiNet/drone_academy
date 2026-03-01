@@ -4,9 +4,20 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart'; // ضروري للـ Navigator و Scaffold
+import 'package:drone_academy/models/ai_query_history.dart';
+
+// ⚡ نظام تخزين مؤقت مع وقت انتهاء الصلاحية
+class CachedData {
+  final List<dynamic> data;
+  final DateTime expiresAt;
+
+  CachedData(this.data, this.expiresAt);
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+}
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -18,12 +29,16 @@ class ApiService {
 
   // تأكد من أن هذا الرابط صحيح ويعمل
   final String baseUrl = 'http://qaaz.live:3000/api';
-  final Duration pollingInterval = const Duration(seconds: 5);
+  // ⚡ تحسين: تقليل معدل الـ polling من 5 ثوانٍ إلى 60 ثانية لتوفير الحصص
+  final Duration pollingInterval = const Duration(seconds: 60);
+
+  // نظام ذاكرة مؤقتة مع TTL
+  final Map<String, CachedData> _memoryCache = {};
+  final Duration _cacheTTL = const Duration(minutes: 5);
 
   static Map<String, dynamic>? currentUser;
   static const String _userKey = 'cached_user_data';
 
-  // ===========================================================================
   // نظام مراقبة حالة المستخدم (الحظر)
   // ===========================================================================
 
@@ -164,6 +179,68 @@ class ApiService {
   }
 
   // ===========================================================================
+  // Connectivity & Debugging Utilities
+  // ===========================================================================
+
+  /// Test if the server is reachable and responsive
+  Future<Map<String, dynamic>> testServerConnectivity() async {
+    _log("CONNECTIVITY_TEST", "Testing connection to: $baseUrl");
+
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/ping'))
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () =>
+                throw TimeoutException('Server connection timeout'),
+          );
+
+      if (response.statusCode == 200) {
+        _log("CONNECTIVITY_TEST", "✅ Server is reachable!");
+        return {
+          'success': true,
+          'message': 'Server is online and responding',
+          'statusCode': 200,
+          'responseTime': 'Received within 10 seconds',
+        };
+      } else {
+        _logError(
+          "CONNECTIVITY_TEST",
+          "Server returned unexpected status: ${response.statusCode}",
+        );
+        return {
+          'success': false,
+          'message': 'Server returned status ${response.statusCode}',
+          'statusCode': response.statusCode,
+        };
+      }
+    } on TimeoutException catch (e) {
+      _logError("CONNECTIVITY_TEST", "Connection timeout: $e");
+      return {
+        'success': false,
+        'message': 'Connection timeout (10 seconds)',
+        'error': 'The server is not responding in time. It may be offline.',
+        'suggestion': 'Check if qaaz.live is accessible from your network',
+      };
+    } on SocketException catch (e) {
+      _logError("CONNECTIVITY_TEST", "Network error: ${e.message}");
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+        'error': 'Cannot reach the server',
+        'suggestion': 'Check your internet connection and firewall settings',
+      };
+    } catch (e) {
+      _logError("CONNECTIVITY_TEST", "Unexpected error: $e");
+      return {
+        'success': false,
+        'message': 'Unexpected error: $e',
+        'error': e.toString(),
+      };
+    }
+  }
+
+  // ===========================================================================
   // 0. Auth & Signup & Device Blocking
   // ===========================================================================
 
@@ -222,19 +299,28 @@ class ApiService {
   // استبدل دالة login القديمة بهذه الدالة المحدثة
   Future<Map<String, dynamic>> login(String email, String password) async {
     _log("LOGIN", "Attempting login for: $email");
+    _log("LOGIN", "Server URL: $baseUrl/login");
+
     final deviceId = await _getDeviceId();
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': email,
-          'password': password,
-          'deviceId': deviceId,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'email': email,
+              'password': password,
+              'deviceId': deviceId,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () =>
+                throw TimeoutException('Server connection timeout'),
+          );
 
       _log("LOGIN", "Response Code: ${response.statusCode}");
+      _log("LOGIN", "Response Body: ${response.body}");
 
       final data = json.decode(response.body);
 
@@ -242,6 +328,7 @@ class ApiService {
         currentUser = data;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_userKey, json.encode(data));
+        _log("LOGIN", "✅ Login successful for: $email");
         return {'success': true};
       } else {
         String errorReason = data['error'] ?? 'Login failed';
@@ -250,20 +337,48 @@ class ApiService {
         // [تعديل] هنا نمرر الإيميل ليظهر في السجل بدلاً من Unknown
         _logError(
           "LOGIN_FAIL",
-          "Status: ${response.statusCode} - Body: ${response.body}",
+          "Status: ${response.statusCode} - Error: $errorReason - Body: ${response.body}",
           tempUserName: "محاولة دخول: $email",
         );
 
         return {'success': false, 'error': errorReason, 'reason': banReason};
       }
+    } on TimeoutException catch (e) {
+      _logError(
+        "LOGIN_TIMEOUT",
+        "Request timed out. Server not responding: $e",
+        tempUserName: "محاولة دخول: $email",
+      );
+      return {
+        'success': false,
+        'error': 'Connection timeout',
+        'details':
+            'The server is not responding. Please check your internet connection.',
+      };
+    } on SocketException catch (e) {
+      _logError(
+        "LOGIN_SOCKET_ERROR",
+        "Network error: ${e.message} - Server: $baseUrl",
+        tempUserName: "محاولة دخول: $email",
+      );
+      return {
+        'success': false,
+        'error': 'SocketException',
+        'details':
+            'Cannot reach the server. Check your internet connection or try again later.',
+      };
     } catch (e) {
       // [تعديل] وهنا أيضاً نمرر الإيميل
       _logError(
         "LOGIN_EXCEPTION",
-        e.toString(),
+        "Unexpected error: ${e.runtimeType} - $e - Server: $baseUrl",
         tempUserName: "محاولة دخول: $email",
       );
-      return {'success': false, 'error': 'Connection error'};
+      return {
+        'success': false,
+        'error': 'Connection error',
+        'details': 'An unexpected error occurred. Please try again.',
+      };
     }
   }
 
@@ -707,6 +822,153 @@ class ApiService {
     } catch (e) {
       _logError("FETCH_STEPS", e.toString());
       return [];
+    }
+  }
+
+  // --- ⚡ محرك الكاش الجديد (Future-based) لتوفير القراءات ---
+  Future<List<dynamic>> fetchWithCache({
+    required String cacheKey,
+    required Future<List<dynamic>> Function() fetcher,
+    bool forceRefresh = false, // لتحديد ما إذا كان المستخدم سحب الشاشة للتحديث
+  }) async {
+    // 1. إذا لم يكن هناك طلب تحديث إجباري، نبحث في الكاش أولاً
+    if (!forceRefresh) {
+      // البحث في الذاكرة العشوائية السريعة
+      final cachedInMemory = _memoryCache[cacheKey];
+      if (cachedInMemory != null && !cachedInMemory.isExpired) {
+        return cachedInMemory.data;
+      }
+
+      // البحث في الذاكرة التخزينية (القرص)
+      final cachedDisk = await _loadFromDisk(cacheKey);
+      if (cachedDisk.isNotEmpty) {
+        // رفعها للذاكرة السريعة للمرات القادمة
+        _memoryCache[cacheKey] = CachedData(
+          cachedDisk,
+          DateTime.now().add(_cacheTTL),
+        );
+        return cachedDisk;
+      }
+    }
+
+    // 2. إذا كان الكاش فارغاً، أو منتهي الصلاحية، أو المستخدم طلب تحديث إجباري -> نكلم السيرفر
+    try {
+      final data =
+          await fetcher(); // استدعاء دالة الجلب الأصلية (مثل fetchTrainings)
+      if (data.isNotEmpty) {
+        // حفظ البيانات الجديدة في الكاش
+        _saveToDisk(cacheKey, data);
+        _memoryCache[cacheKey] = CachedData(
+          data,
+          DateTime.now().add(_cacheTTL),
+        );
+      }
+      return data;
+    } catch (e) {
+      // 3. في حالة فشل الإنترنت، نعيد آخر نسخة محفوظة في الجهاز (إن وجدت)
+      return await _loadFromDisk(cacheKey);
+    }
+  }
+
+  // --- 🚀 دوال الجلب الجديدة للاستخدام في الواجهات ---
+
+  // جلب التدريبات
+  Future<List<dynamic>> getTrainings({bool forceRefresh = false}) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_TRAININGS',
+      fetcher: fetchTrainings,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // جلب المعدات
+  Future<List<dynamic>> getEquipment({bool forceRefresh = false}) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_EQUIPMENT',
+      fetcher: fetchEquipment,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // جلب المستخدمين (بالكاش)
+  Future<List<dynamic>> getUsers({bool forceRefresh = false}) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_USERS_FUTURE',
+      fetcher: fetchUsers,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // جلب المخزون (بالكاش)
+  Future<List<dynamic>> getInventory({bool forceRefresh = false}) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_INVENTORY_FUTURE',
+      fetcher: fetchInventory,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // جلب المسابقات (بالكاش)
+  Future<List<dynamic>> getCompetitions({bool forceRefresh = false}) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_COMPETITIONS_FUTURE',
+      fetcher: fetchCompetitions,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // جلب النتائج (بالكاش) - يدعم traineeUid اختياري
+  Future<List<dynamic>> getResults({
+    String? traineeUid,
+    bool forceRefresh = false,
+  }) {
+    final cacheKey = traineeUid != null
+        ? 'CACHE_RESULTS_$traineeUid'
+        : 'CACHE_RESULTS_ALL';
+
+    return fetchWithCache(
+      cacheKey: cacheKey,
+      fetcher: () => fetchResults(traineeUid: traineeUid),
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // جلب الملاحظات اليومية (بالكاش) - يدعم traineeUid اختياري
+  Future<List<dynamic>> getDailyNotes({
+    String? traineeUid,
+    bool forceRefresh = false,
+  }) {
+    final cacheKey = traineeUid != null
+        ? 'CACHE_DAILY_NOTES_$traineeUid'
+        : 'CACHE_DAILY_NOTES_ALL';
+
+    return fetchWithCache(
+      cacheKey: cacheKey,
+      fetcher: () => fetchDailyNotes(traineeUid: traineeUid),
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  // دالة طلب التحليل المجمع من السيرفر
+  Future<Map<String, dynamic>> analyzeBulkNotes(
+    Map<String, List<String>> traineesNotes,
+  ) async {
+    try {
+      final user = currentUser;
+      final response = await http.post(
+        Uri.parse('$baseUrl/analyze_bulk_notes'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'traineesNotes': traineesNotes,
+          'requester': {'email': user?['email']},
+        }),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body)['summaries'] ?? {};
+      }
+      return {};
+    } catch (e) {
+      return {};
     }
   }
 
@@ -1203,28 +1465,78 @@ class ApiService {
     }
   }
 
-  Stream<Map<String, dynamic>> streamAppConfig() => Stream.periodic(
-    pollingInterval,
-  ).asyncMap((_) => fetchAppConfig()).asBroadcastStream();
+  // ✅ تم التعديل لجلب البيانات فوراً ثم التكرار كل 60 ثانية
+  Stream<Map<String, dynamic>> streamAppConfig() {
+    late StreamController<Map<String, dynamic>> controller;
+    Timer? timer;
 
+    controller = StreamController<Map<String, dynamic>>.broadcast(
+      onListen: () async {
+        // 1. جلب البيانات فوراً عند الاستماع
+        controller.add(await fetchAppConfig());
+
+        // 2. تشغيل المؤقت لتحديث البيانات كل 60 ثانية من server.js
+        timer = Timer.periodic(const Duration(seconds: 60), (_) async {
+          controller.add(await fetchAppConfig());
+        });
+      },
+      onCancel: () {
+        timer?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  Map<String, dynamic> _getDefaultConfig() {
+    return {
+      'isEnabled': true,
+      'minVersion': '1.0.0',
+      'latestVersion': '1.0.2',
+      'updateRequired': false,
+      'updateUrl': '',
+      'updateMessage': 'تحديث جديد متاح',
+    };
+  }
+
+  // قراءة الإعدادات من server.js الذي يقرأ من Firebase ويقوم بالمقارنات
   Future<Map<String, dynamic>> fetchAppConfig() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/app_config'));
-      if (res.statusCode == 200) return json.decode(res.body);
-      _logError("FETCH_CONFIG", "Status: ${res.statusCode}");
-      return {'isEnabled': true, 'forceUpdate': false};
+      print('🌐 [FETCH_CONFIG] Requesting: $baseUrl/app_config');
+      final response = await http.get(Uri.parse('$baseUrl/app_config'));
+
+      if (response.statusCode == 200) {
+        final config = Map<String, dynamic>.from(json.decode(response.body));
+        print('✅ [FETCH_CONFIG] Success: $config');
+        return config;
+      }
+
+      print('⚠️ [FETCH_CONFIG] Failed with status: ${response.statusCode}');
+      _logError("FETCH_CONFIG", "Status: ${response.statusCode}");
+      final defaultConfig = _getDefaultConfig();
+      print('🔄 [FETCH_CONFIG] Using default config: $defaultConfig');
+      return defaultConfig;
     } catch (e) {
+      print('❌ [FETCH_CONFIG] Error: $e');
       _logError("FETCH_CONFIG", e.toString());
-      return {'isEnabled': true, 'forceUpdate': false};
+      final defaultConfig = _getDefaultConfig();
+      print(
+        '🔄 [FETCH_CONFIG] Using default config due to error: $defaultConfig',
+      );
+      return defaultConfig;
     }
   }
 
   Future<String> analyzeNotes(List<String> notes) async {
     try {
+      final user = currentUser;
       final response = await http.post(
         Uri.parse('$baseUrl/analyze_notes'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'notes': notes}),
+        body: json.encode({
+          'notes': notes,
+          'requester': {'email': user?['email']},
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -1239,15 +1551,98 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> aiAdminQuery({
+    required String question,
+    required Map<String, bool> scope,
+    String mode = 'general',
+    int limit = 50, // ⚡ حد افتراضي 50 بدلاً من 200 لتقليل الاستهلاك
+  }) async {
+    try {
+      // ⚡ تحقق من وجود نفس الاستعلام في الذاكرة المؤقتة
+      final cacheKey = 'AI_QUERY_${question}_${mode}_${scope.toString()}';
+      final cached = _memoryCache[cacheKey];
+      if (cached != null && !cached.isExpired) {
+        return {
+          'success': true,
+          'answer': (cached.data.isNotEmpty ? cached.data[0] : ''),
+          'cached': true,
+        };
+      }
+
+      final user = currentUser;
+      final response = await http.post(
+        Uri.parse('$baseUrl/ai_admin_query'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'question': question,
+          'mode': mode,
+          'scope': scope,
+          'limit': limit, // ⚡ إرسال الحد للسيرفر
+          'requester': {
+            'uid': user?['uid'] ?? user?['id'],
+            'role': user?['role'],
+            'email': user?['email'],
+          },
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final answer = data['answer']?.toString() ?? '';
+
+        // ⚡ حفظ النتيجة في الذاكرة المؤقتة لمدة 10 دقائق
+        _memoryCache[cacheKey] = CachedData([
+          answer,
+        ], DateTime.now().add(const Duration(minutes: 10)));
+
+        // 💾 حفظ تلقائياً في السجل المحلي
+        final historyItem = AiQueryHistory(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          question: question,
+          answer: answer,
+          mode: mode,
+          scope: scope,
+          timestamp: DateTime.now(),
+          userName: user?['displayName'] ?? user?['email'] ?? 'Unknown',
+          dataLimit: limit,
+        );
+        await saveAiQueryToHistory(historyItem);
+
+        return {'success': true, 'answer': answer};
+      }
+
+      _logError(
+        "AI_ADMIN",
+        "Status: ${response.statusCode} - ${response.body}",
+      );
+      return {
+        'success': false,
+        'error': 'فشل الطلب (خطأ ${response.statusCode})',
+      };
+    } catch (e) {
+      _logError("AI_ADMIN", e.toString());
+      return {'success': false, 'error': 'تعذر الاتصال بالسيرفر.'};
+    }
+  }
+
   Future<bool> updateAppConfig(Map<String, dynamic> data) async {
     try {
+      // إرسال البيانات إلى server.js ليقوم بالحفظ والتحقق من Firebase
       final response = await http.post(
         Uri.parse('$baseUrl/app_config'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200) _logError("UPDATE_CONFIG", response.body);
-      return true;
+
+      if (response.statusCode == 200) {
+        return true;
+      }
+
+      _logError(
+        "UPDATE_CONFIG",
+        "Status: ${response.statusCode} - ${response.body}",
+      );
+      return false;
     } catch (e) {
       _logError("UPDATE_CONFIG", e.toString());
       return false;
@@ -1296,11 +1691,27 @@ class ApiService {
 
     void tick() async {
       if (controller.isClosed) return;
+
+      // ⚡ تحقق من الذاكرة المؤقتة أولاً قبل الطلب من السيرفر
+      final cachedInMemory = _memoryCache[cacheKey];
+      if (cachedInMemory != null && !cachedInMemory.isExpired) {
+        // البيانات موجودة في الذاكرة وصالحة، لا حاجة للطلب
+        if (!controller.isClosed) {
+          controller.add(cachedInMemory.data);
+        }
+        return;
+      }
+
       try {
         final data = await fetcher();
         if (!controller.isClosed && data.isNotEmpty) {
           controller.add(data);
           _saveToDisk(cacheKey, data);
+          // ⚡ حفظ في الذاكرة المؤقتة مع وقت انتهاء الصلاحية
+          _memoryCache[cacheKey] = CachedData(
+            data,
+            DateTime.now().add(_cacheTTL),
+          );
         }
       } catch (e) {
         // Errors are logged inside fetchers now
@@ -1308,9 +1719,23 @@ class ApiService {
     }
 
     void start() async {
-      final cachedData = await _loadFromDisk(cacheKey);
-      if (cachedData.isNotEmpty && !controller.isClosed) {
-        controller.add(cachedData);
+      // تحقق من memory cache أولاً
+      final cachedInMemory = _memoryCache[cacheKey];
+      if (cachedInMemory != null && !cachedInMemory.isExpired) {
+        if (!controller.isClosed) {
+          controller.add(cachedInMemory.data);
+        }
+      } else {
+        // جلب من disk cache
+        final cachedData = await _loadFromDisk(cacheKey);
+        if (cachedData.isNotEmpty && !controller.isClosed) {
+          controller.add(cachedData);
+          // حفظ في memory أيضاً
+          _memoryCache[cacheKey] = CachedData(
+            cachedData,
+            DateTime.now().add(_cacheTTL),
+          );
+        }
       }
       tick();
       timer = Timer.periodic(pollingInterval, (_) => tick());
@@ -1350,5 +1775,150 @@ class ApiService {
       print("Cache Load Error ($key): $e");
     }
     return [];
+  }
+
+  /// ⚡ تنظيف الذاكرة المؤقتة من البيانات المنتهية الصلاحية
+  void cleanExpiredCache() {
+    _memoryCache.removeWhere((key, value) => value.isExpired);
+  }
+
+  /// ⚡ مسح كل الذاكرة المؤقتة (للإدمنز فقط أو عند الحاجة)
+  void clearAllCache() {
+    _memoryCache.clear();
+    SharedPreferences.getInstance().then((prefs) {
+      final keys = prefs.getKeys().where((k) => k.startsWith('CACHE_'));
+      for (final key in keys) {
+        prefs.remove(key);
+      }
+    });
+  }
+
+  // ===========================================================================
+  // 12. نظام حفظ سجل استعلامات الذكاء الاصطناعي محلياً
+  // ===========================================================================
+
+  static const String _aiHistoryKey = 'AI_QUERY_HISTORY';
+  static const int _maxHistoryItems = 100; // الحد الأقصى للسجلات المحفوظة
+
+  /// حفظ استعلام جديد في السجل المحلي
+  Future<bool> saveAiQueryToHistory(AiQueryHistory query) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<AiQueryHistory> history = await getAiQueryHistory();
+
+      // إضافة الاستعلام الجديد في البداية
+      history.insert(0, query);
+
+      // الاحتفاظ بآخر _maxHistoryItems فقط
+      if (history.length > _maxHistoryItems) {
+        history.removeRange(_maxHistoryItems, history.length);
+      }
+
+      // تحويل إلى JSON وحفظ
+      final jsonList = history.map((q) => q.toJson()).toList();
+      await prefs.setString(_aiHistoryKey, json.encode(jsonList));
+
+      _log("AI_HISTORY", "Saved query: ${query.question.substring(0, 30)}...");
+      return true;
+    } catch (e) {
+      _logError("AI_HISTORY_SAVE", e.toString());
+      return false;
+    }
+  }
+
+  /// جلب جميع السجلات المحفوظة
+  Future<List<AiQueryHistory>> getAiQueryHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? data = prefs.getString(_aiHistoryKey);
+
+      if (data == null || data.isEmpty) {
+        return [];
+      }
+
+      final List<dynamic> jsonList = json.decode(data);
+      return jsonList.map((json) => AiQueryHistory.fromJson(json)).toList();
+    } catch (e) {
+      _logError("AI_HISTORY_GET", e.toString());
+      return [];
+    }
+  }
+
+  /// البحث في السجل بكلمة مفتاحية
+  Future<List<AiQueryHistory>> searchAiQueryHistory(String keyword) async {
+    try {
+      final List<AiQueryHistory> allHistory = await getAiQueryHistory();
+      final lowerKeyword = keyword.toLowerCase();
+
+      return allHistory.where((query) {
+        return query.question.toLowerCase().contains(lowerKeyword) ||
+            query.answer.toLowerCase().contains(lowerKeyword) ||
+            query.getModeLabel().toLowerCase().contains(lowerKeyword);
+      }).toList();
+    } catch (e) {
+      _logError("AI_HISTORY_SEARCH", e.toString());
+      return [];
+    }
+  }
+
+  /// حذف استعلام محدد من السجل
+  Future<bool> deleteAiQueryFromHistory(String queryId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<AiQueryHistory> history = await getAiQueryHistory();
+
+      // إزالة الاستعلام المطلوب
+      history.removeWhere((q) => q.id == queryId);
+
+      // حفظ القائمة المحدثة
+      final jsonList = history.map((q) => q.toJson()).toList();
+      await prefs.setString(_aiHistoryKey, json.encode(jsonList));
+
+      _log("AI_HISTORY", "Deleted query: $queryId");
+      return true;
+    } catch (e) {
+      _logError("AI_HISTORY_DELETE", e.toString());
+      return false;
+    }
+  }
+
+  /// مسح جميع السجلات
+  Future<bool> clearAiQueryHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_aiHistoryKey);
+      _log("AI_HISTORY", "Cleared all history");
+      return true;
+    } catch (e) {
+      _logError("AI_HISTORY_CLEAR", e.toString());
+      return false;
+    }
+  }
+
+  /// الحصول على إحصائيات السجل
+  Future<Map<String, dynamic>> getAiHistoryStats() async {
+    try {
+      final List<AiQueryHistory> history = await getAiQueryHistory();
+
+      // حساب الإحصائيات
+      final Map<String, int> modeCount = {};
+      for (var query in history) {
+        modeCount[query.mode] = (modeCount[query.mode] ?? 0) + 1;
+      }
+
+      return {
+        'total': history.length,
+        'byMode': modeCount,
+        'oldest': history.isEmpty
+            ? null
+            : history.last.timestamp.toIso8601String(),
+        'newest': history.isEmpty
+            ? null
+            : history.first.timestamp.toIso8601String(),
+      };
+    } catch (e) {
+      _logError("AI_HISTORY_STATS", e.toString());
+      return {'total': 0};
+    }
   }
 }

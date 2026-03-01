@@ -857,5 +857,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get generalSupervisor => 'General Supervisor';
 
   @override
-  String get madeBy => 'v1.0.0 • Made with ❤️ by Shami';
+  String get madeBy => 'Made with ❤️ by Shami';
 }

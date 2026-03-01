@@ -14,6 +14,19 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
   final ApiService _apiService = ApiService();
   // 0: الكل، 1: محظورون، 2: نشطون
   int _selectedIndex = 0;
+  late Future<List<dynamic>> _usersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersFuture = _apiService.getUsers();
+  }
+
+  Future<void> _onRefresh() async {
+    setState(() {
+      _usersFuture = _apiService.getUsers(forceRefresh: true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,8 +41,8 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
         elevation: 0,
         actions: [
           // --- العداد الديناميكي (تم تفعيله) ---
-          StreamBuilder<List<dynamic>>(
-            stream: _apiService.streamUsers(), // الاستماع للتحديثات
+          FutureBuilder<List<dynamic>>(
+            future: _usersFuture,
             builder: (context, snapshot) {
               final users = snapshot.data ?? [];
               final blockedCount = users
@@ -83,147 +96,161 @@ class _UserBlockingScreenState extends State<UserBlockingScreen> {
 
           // --- القائمة ---
           Expanded(
-            child: StreamBuilder<List<dynamic>>(
-              stream: _apiService
-                  .streamUsers(), // استخدام السيرفر بدلاً من فايربيز
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child: RefreshIndicator(
+              onRefresh: _onRefresh,
+              child: FutureBuilder<List<dynamic>>(
+                future: _usersFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                final allUsers = snapshot.data ?? [];
-
-                // التصفية حسب التبويب المختار
-                final filteredUsers = allUsers.where((user) {
-                  final bool isBlocked = user['isBlocked'] == true;
-
-                  if (_selectedIndex == 1) return isBlocked; // محظورون فقط
-                  if (_selectedIndex == 2) return !isBlocked; // نشطون فقط
-                  return true; // الكل
-                }).toList();
-
-                if (filteredUsers.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      "لا يوجد مستخدمين",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: filteredUsers.length,
-                  itemBuilder: (context, index) {
-                    final user = filteredUsers[index];
-                    final bool isBlocked = user['isBlocked'] == true;
-                    final String photoUrl = user['photoUrl'] ?? '';
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        borderRadius: BorderRadius.circular(10),
-                        border: isBlocked
-                            ? Border.all(color: Colors.red.withOpacity(0.3))
-                            : null,
-                      ),
-                      child: Row(
-                        children: [
-                          // مفتاح التبديل (Switch)
-                          Switch(
-                            value: !isBlocked, // On = نشط، Off = محظور
-                            activeColor: const Color(0xFFFF9800),
-                            inactiveThumbColor: Colors.grey,
-                            inactiveTrackColor: Colors.grey.shade800,
-                            onChanged: (val) {
-                              // عكس الحالة (إذا كان val=true يعني نريد التفعيل، إذن isBlocked يجب أن يصبح false)
-                              _toggleBlockStatus(user, !val);
-                            },
-                          ),
-                          const Spacer(),
-
-                          // المعلومات
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                user['displayName'] ?? 'User',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text(
-                                user['email'] ?? '',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              // شارة الحالة
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isBlocked
-                                      ? Colors.red.withOpacity(0.2)
-                                      : Colors.green.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: isBlocked
-                                        ? Colors.red
-                                        : Colors.green,
-                                  ),
-                                ),
-                                child: Text(
-                                  isBlocked ? 'محظور' : 'نشط',
-                                  style: TextStyle(
-                                    color: isBlocked
-                                        ? Colors.red
-                                        : Colors.green,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(width: 12),
-
-                          // الصورة أو أيقونة الحظر
-                          isBlocked
-                              ? const CircleAvatar(
-                                  backgroundColor: Colors.red,
-                                  child: Icon(Icons.block, color: Colors.white),
-                                )
-                              : CircleAvatar(
-                                  backgroundColor: Colors.grey.shade800,
-                                  backgroundImage: (photoUrl.isNotEmpty)
-                                      ? CachedNetworkImageProvider(photoUrl)
-                                      : null,
-                                  child: (photoUrl.isEmpty)
-                                      ? const Icon(
-                                          Icons.person,
-                                          color: Colors.white,
-                                        )
-                                      : null,
-                                ),
-                        ],
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'خطأ: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.white),
                       ),
                     );
-                  },
-                );
-              },
+                  }
+
+                  final allUsers = snapshot.data ?? [];
+
+                  // التصفية حسب التبويب المختار
+                  final filteredUsers = allUsers.where((user) {
+                    final bool isBlocked = user['isBlocked'] == true;
+
+                    if (_selectedIndex == 1) return isBlocked; // محظورون فقط
+                    if (_selectedIndex == 2) return !isBlocked; // نشطون فقط
+                    return true; // الكل
+                  }).toList();
+
+                  if (filteredUsers.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        "لا يوجد مستخدمين",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filteredUsers.length,
+                    itemBuilder: (context, index) {
+                      final user = filteredUsers[index];
+                      final bool isBlocked = user['isBlocked'] == true;
+                      final String photoUrl = user['photoUrl'] ?? '';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: isBlocked
+                              ? Border.all(color: Colors.red.withOpacity(0.3))
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            // مفتاح التبديل (Switch)
+                            Switch(
+                              value: !isBlocked, // On = نشط، Off = محظور
+                              activeColor: const Color(0xFFFF9800),
+                              inactiveThumbColor: Colors.grey,
+                              inactiveTrackColor: Colors.grey.shade800,
+                              onChanged: (val) {
+                                // عكس الحالة (إذا كان val=true يعني نريد التفعيل، إذن isBlocked يجب أن يصبح false)
+                                _toggleBlockStatus(user, !val);
+                              },
+                            ),
+                            const Spacer(),
+
+                            // المعلومات
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  user['displayName'] ?? 'User',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  user['email'] ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                // شارة الحالة
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isBlocked
+                                        ? Colors.red.withOpacity(0.2)
+                                        : Colors.green.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: isBlocked
+                                          ? Colors.red
+                                          : Colors.green,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    isBlocked ? 'محظور' : 'نشط',
+                                    style: TextStyle(
+                                      color: isBlocked
+                                          ? Colors.red
+                                          : Colors.green,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            // الصورة أو أيقونة الحظر
+                            isBlocked
+                                ? const CircleAvatar(
+                                    backgroundColor: Colors.red,
+                                    child: Icon(
+                                      Icons.block,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : CircleAvatar(
+                                    backgroundColor: Colors.grey.shade800,
+                                    backgroundImage: (photoUrl.isNotEmpty)
+                                        ? CachedNetworkImageProvider(photoUrl)
+                                        : null,
+                                    child: (photoUrl.isEmpty)
+                                        ? const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                          )
+                                        : null,
+                                  ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],

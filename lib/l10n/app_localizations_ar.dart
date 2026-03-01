@@ -399,7 +399,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get selectLanguage => 'اختر اللغة';
 
   @override
-  String get videoThumbnail => 'Video Thumbnail';
+  String get videoThumbnail => 'صورة مصغرة للفيديو';
 
   @override
   String get analyzing => 'جاري التحليل...';
@@ -677,29 +677,29 @@ class AppLocalizationsAr extends AppLocalizations {
   String get userUnblocked => 'تم إلغاء حظر المستخدم بنجاح.';
 
   @override
-  String get reportReadyTitle => 'Report Ready';
+  String get reportReadyTitle => 'التقرير جاهز';
 
   @override
   String get reportSavedSuccessfully => 'تم حفظ التقرير بنجاح في التنزيلات.';
 
   @override
-  String get reportSavedSuccess => 'Report saved successfully in Downloads.';
+  String get reportSavedSuccess => 'تم حفظ التقرير بنجاح في التنزيلات.';
 
   @override
   String get reportReadyContent =>
-      'Your comprehensive report has been generated successfully. You can now export or share it as you wish.';
+      'تم إنشاء تقريرك الشامل بنجاح. يمكنك الآن التصدير أو المشاركة كما تشاء.';
 
   @override
   String get export => 'تصدير';
 
   @override
-  String get share => 'Share';
+  String get share => 'مشاركة';
 
   @override
-  String get saveToDownloads => 'Save to Downloads';
+  String get saveToDownloads => 'حفظ في التنزيلات';
 
   @override
-  String get previewAndPrint => 'Preview and Print';
+  String get previewAndPrint => 'معاينة وطباعة';
 
   @override
   String get reportGeneratedSuccessfully => 'تم إنشاء التقرير بنجاح.';
@@ -855,5 +855,5 @@ class AppLocalizationsAr extends AppLocalizations {
   String get generalSupervisor => 'المشرف العام';
 
   @override
-  String get madeBy => 'v1.0.0 • Made with ❤️ by Shami';
+  String get madeBy => 'Made with ❤️ by Shami';
 }

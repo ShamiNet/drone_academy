@@ -1,5 +1,6 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class AppVersionScreen extends StatelessWidget {
   const AppVersionScreen({super.key});
@@ -89,12 +90,20 @@ class AppVersionScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: primaryColor.withOpacity(0.5)),
                   ),
-                  child: const Text(
-                    "v1.0.0 (Stable)",
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: FutureBuilder<PackageInfo>(
+                    future: PackageInfo.fromPlatform(),
+                    builder: (context, snapshot) {
+                      final version = snapshot.hasData
+                          ? 'v${snapshot.data!.version} (Stable)'
+                          : 'v...';
+                      return Text(
+                        version,
+                        style: const TextStyle(
+                          color: primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -192,7 +201,7 @@ class AppVersionScreen extends StatelessWidget {
               FadeInUp(
                 delay: const Duration(milliseconds: 800),
                 child: const Text(
-                  "© 2025 Drone Academy. All rights reserved.",
+                  "© 2026 Drone Academy. جميع الحقوق محفوظة.",
                   style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ),

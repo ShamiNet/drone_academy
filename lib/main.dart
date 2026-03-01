@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/screens/app_status_wrapper.dart';
 import 'package:drone_academy/screens/splash_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/services/language_service.dart';
@@ -17,36 +18,60 @@ import 'package:toastification/toastification.dart';
 // [تم الحذف] لا نحتاج استيراد هذا الملف إذا لم يكن موجوداً
 // import 'firebase_options.dart';
 
+// 📊 متغير عام لقياس الأداء
+class PerformanceTracker {
+  static final DateTime appStartTime = DateTime.now();
+
+  static void logTime(String stage, {bool showFromStart = true}) {
+    final now = DateTime.now();
+    final elapsed = now.difference(appStartTime).inMilliseconds;
+    final stageMs = elapsed > 0 ? elapsed : 0;
+
+    debugPrint(
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+      '⏱️  [$stage]\n'
+      '   وقت المرحلة من البداية: ${stageMs}ms (${(stageMs / 1000).toStringAsFixed(2)}s)\n'
+      '   الوقت الحالي: ${now.hour}:${now.minute}:${now.second}.${now.millisecond}\n'
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    );
+  }
+}
+
 void main() async {
+  PerformanceTracker.logTime('APP_START');
   WidgetsFlutterBinding.ensureInitialized();
 
-  // [تعديل] تهيئة فايربيس بدون خيارات (سيعتمد على google-services.json)
+  // ⚡ تهيئة Firebase (حرجة - يجب أن تنتظر)
   try {
     await Firebase.initializeApp();
+    PerformanceTracker.logTime('FIREBASE_INIT_DONE');
   } catch (e) {
-    print("Firebase init error: $e");
+    debugPrint("Firebase init error: $e");
   }
 
-  // إعدادات فايرستور (اختياري، للكاش)
+  // ⚡ تفعيل المداومة في Firestore (استخدام الكاش المحلي)
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
   );
+  PerformanceTracker.logTime('FIRESTORE_CACHE_ENABLED');
 
-  // تهيئة الإشعارات
-  await NotificationService().initNotifications();
+  // 🔔 تهيئة الإشعارات (بدء غير متزامن في الخلفية)
+  // ملاحظة: لا ننتظر هنا لأنها قد تأخذ وقتاً وتؤخر بدء التطبيق
+  NotificationService().initNotifications().ignore();
+  PerformanceTracker.logTime('NOTIFICATIONS_INIT_STARTED');
 
-  // --- بداية كود التقاط الأخطاء ---
+  // --- معالجات الأخطاء ---
 
-  // 1. التقاط أخطاء فلاتر (الشاشة الحمراء)
+  // 1️⃣ التقاط أخطاء Flutter (الشاشة الحمراء)
   FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details); // عرض الخطأ في الكونسول
+    FlutterError.presentError(details);
     ApiService().logAppError(
       error: details.exceptionAsString(),
       stackTrace: details.stack.toString(),
     );
   };
 
-  // 2. التقاط الأخطاء البرمجية الخلفية (Async Errors)
+  // 2️⃣ التقاط الأخطاء غير المتزامنة
   PlatformDispatcher.instance.onError = (error, stack) {
     ApiService().logAppError(
       error: error.toString(),
@@ -55,8 +80,8 @@ void main() async {
     return true;
   };
 
-  // --- نهاية كود التقاط الأخطاء ---
-
+  // --- بدء التطبيق ---
+  PerformanceTracker.logTime('BEFORE_RUNAPP');
   runApp(const MyApp());
 }
 
@@ -118,8 +143,10 @@ class _MyAppState extends State<MyApp> {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        // تمرير دوال اللغة والثيم إلى السبلاش
-        home: SplashScreen(setLocale: setLocale, setThemeMode: setThemeMode),
+        // تمرير دوال اللغة والثيم إلى السبلاش مع لف التطبيق بفاحص الإصدار
+        home: AppStatusWrapper(
+          child: SplashScreen(setLocale: setLocale, setThemeMode: setThemeMode),
+        ),
       ),
     );
   }

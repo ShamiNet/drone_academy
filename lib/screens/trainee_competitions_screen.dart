@@ -13,6 +13,19 @@ class TraineeCompetitionsScreen extends StatefulWidget {
 
 class _TraineeCompetitionsScreenState extends State<TraineeCompetitionsScreen> {
   final ApiService _apiService = ApiService();
+  late Future<List<dynamic>> _competitionsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _competitionsFuture = _apiService.getCompetitions();
+  }
+
+  Future<void> _onRefresh() async {
+    setState(() {
+      _competitionsFuture = _apiService.getCompetitions(forceRefresh: true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,62 +34,78 @@ class _TraineeCompetitionsScreenState extends State<TraineeCompetitionsScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: StreamBuilder<List<dynamic>>(
-        stream: _apiService.streamCompetitions(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: FutureBuilder<List<dynamic>>(
+          future: _competitionsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final competitions = snapshot.data ?? [];
-          if (competitions.isEmpty) {
-            return Center(
-              child: Text(
-                l10n.noActiveCompetitions,
-                style: const TextStyle(color: Colors.grey),
-              ),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: competitions.length,
-            itemBuilder: (context, index) {
-              final competition = competitions[index];
-              return Card(
-                color: const Color(0xFF1E2230),
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.emoji_events,
-                    color: Colors.amber,
-                    size: 30,
-                  ),
-                  title: Text(
-                    competition['title'] ?? '',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    color: Colors.grey,
-                    size: 16,
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            CompetitionDetailsScreen(competition: competition),
-                      ),
-                    );
-                  },
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'خطأ: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.white),
                 ),
               );
-            },
-          );
-        },
+            }
+
+            final competitions = snapshot.data ?? [];
+            if (competitions.isEmpty) {
+              return Center(
+                child: Text(
+                  l10n.noActiveCompetitions,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              itemCount: competitions.length,
+              itemBuilder: (context, index) {
+                final competition = competitions[index];
+                return Card(
+                  color: const Color(0xFF1E2230),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.emoji_events,
+                      color: Colors.amber,
+                      size: 30,
+                    ),
+                    title: Text(
+                      competition['title'] ?? '',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.grey,
+                      size: 16,
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CompetitionDetailsScreen(
+                            competition: competition,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

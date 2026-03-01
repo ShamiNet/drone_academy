@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/screens/admin_settings_screen.dart';
+import 'package:drone_academy/screens/ai_admin_screen.dart';
+import 'package:drone_academy/screens/ai_history_screen.dart';
 import 'package:drone_academy/screens/contact_developer_screen.dart';
 import 'package:drone_academy/screens/error_logs_screen.dart';
 import 'package:drone_academy/screens/manage_competitions_tab.dart';
@@ -348,6 +350,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     onTap: () {
                       Navigator.pop(context);
                       _goToSettings();
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.auto_awesome,
+                    title: "مساعد الذكاء الاصطناعي",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AiAdminScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.history_edu,
+                    title: "سجل استعلامات الذكاء الاصطناعي",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AiHistoryScreen(),
+                        ),
+                      );
                     },
                   ),
                   _buildDrawerItem(

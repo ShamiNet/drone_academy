@@ -40,6 +40,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // --- الحقول الجديدة (Dropdowns) ---
   String? _selectedMaritalStatus;
   String? _selectedUnitType;
+  int _selectedLevel = 1;
 
   Map<String, dynamic>? _user;
   String? _photoUrl;
@@ -51,6 +52,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final Color _bgColor = const Color(0xFF111318);
   final Color _cardColor = const Color(0xFF1E2230);
   final Color _primaryColor = const Color(0xFFFF9800);
+
+  bool get _isSupervisor {
+    final role = (_user?['role'] ?? ApiService.currentUser?['role'] ?? '')
+        .toString()
+        .toLowerCase();
+    return role == 'owner' || role == 'admin';
+  }
 
   @override
   void initState() {
@@ -102,6 +110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ut = null;
           }
           _selectedUnitType = ut;
+          _selectedLevel = int.tryParse(data['level']?.toString() ?? '') ?? 1;
 
           _isLoading = false;
         });
@@ -216,6 +225,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'maritalStatus': _selectedMaritalStatus ?? '',
         'unitType': _selectedUnitType ?? '',
       };
+
+      if (_isSupervisor) {
+        updatedData['level'] = _selectedLevel;
+      }
 
       await _apiService.updateUser(updatedData);
 
@@ -333,6 +346,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
               onChanged: (val) => setState(() => _selectedUnitType = val),
             ),
+
+            if (_isSupervisor)
+              _buildLevelDropdownField(
+                label: l10n.traineeLevel,
+                value: _selectedLevel,
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedLevel = value);
+                  }
+                },
+                level1Text: l10n.level1Beginner,
+                level2Text: l10n.level2Intermediate,
+                level3Text: l10n.level3Advanced,
+              ),
 
             const SizedBox(height: 20),
             _buildSectionTitle("المعلومات المهنية"),
@@ -532,6 +559,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(color: Colors.grey.shade500),
                 ),
                 items: items,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLevelDropdownField({
+    required String label,
+    required int value,
+    required ValueChanged<int?> onChanged,
+    required String level1Text,
+    required String level2Text,
+    required String level3Text,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.school, color: Colors.grey),
+          const SizedBox(width: 16),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: value,
+                isExpanded: true,
+                dropdownColor: _cardColor,
+                style: const TextStyle(color: Colors.white),
+                hint: Text(
+                  label,
+                  style: TextStyle(color: Colors.grey.shade500),
+                ),
+                items: [
+                  DropdownMenuItem(value: 1, child: Text(level1Text)),
+                  DropdownMenuItem(value: 2, child: Text(level2Text)),
+                  DropdownMenuItem(value: 3, child: Text(level3Text)),
+                ],
                 onChanged: onChanged,
               ),
             ),

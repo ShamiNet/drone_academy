@@ -18,26 +18,56 @@ class AppStatusWrapper extends StatefulWidget {
 class _AppStatusWrapperState extends State<AppStatusWrapper> {
   final ApiService _apiService = ApiService();
 
-  // دالة مقارنة الإصدارات
+  // دالة مقارنة الإصدارات - ترجع true إذا الإصدار مدعوم (>= minVersion)
   bool _isVersionSupported(String currentVersion, String minVersion) {
     if (minVersion.isEmpty) return true;
+
     try {
-      List<int> current = currentVersion
+      // إزالة أي حرف 'v' من البداية
+      final cleanCurrent = currentVersion.toLowerCase().replaceAll('v', '');
+      final cleanMin = minVersion.toLowerCase().replaceAll('v', '');
+
+      List<int> current = cleanCurrent
           .split('.')
-          .map((e) => int.parse(e))
+          .map((e) => int.tryParse(e) ?? 0)
           .toList();
-      List<int> min = minVersion.split('.').map((e) => int.parse(e)).toList();
+      List<int> min = cleanMin
+          .split('.')
+          .map((e) => int.tryParse(e) ?? 0)
+          .toList();
+
+      // التأكد من وجود 3 أجزاء على الأقل
+      while (current.length < 3) current.add(0);
+      while (min.length < 3) min.add(0);
 
       for (int i = 0; i < 3; i++) {
-        int c = i < current.length ? current[i] : 0;
-        int m = i < min.length ? min[i] : 0;
-        if (c < m) return false; // الإصدار الحالي أقل
-        if (c > m) return true; // الإصدار الحالي أعلى
+        int c = current[i];
+        int m = min[i];
+
+        if (c < m) {
+          print(
+            '🔴 [VERSION_CHECK] Current: $currentVersion < Min: $minVersion → BLOCKED',
+          );
+          return false; // الإصدار الحالي أقل من المطلوب → **ممنوع**
+        }
+        if (c > m) {
+          print(
+            '✅ [VERSION_CHECK] Current: $currentVersion > Min: $minVersion → ALLOWED',
+          );
+          return true; // الإصدار الحالي أعلى → مسموح
+        }
       }
+
+      print(
+        '✅ [VERSION_CHECK] Current: $currentVersion = Min: $minVersion → ALLOWED',
+      );
+      return true; // الإصدارات متساوية → مسموح
     } catch (e) {
-      return true; // في حال الخطأ في التنسيق، اسمح بالدخول
+      print(
+        '⚠️ [VERSION_CHECK] Error parsing versions: $e → ALLOWED (fallback)',
+      );
+      return true; // في حال الخطأ، اسمح بالدخول (لتجنب قفل المستخدمين)
     }
-    return true;
   }
 
   @override
@@ -51,6 +81,10 @@ class _AppStatusWrapperState extends State<AppStatusWrapper> {
         }
 
         final config = snapshot.data!;
+
+        // 📊 طباعة البيانات المستلمة من السيرفر
+        print('📡 [APP_CONFIG_RECEIVED] ${config.toString()}');
+
         final bool isEnabled = config['isEnabled'] ?? true;
 
         // التحقق من وضع الصيانة
@@ -72,6 +106,10 @@ class _AppStatusWrapperState extends State<AppStatusWrapper> {
             final currentVersion = pkgSnapshot.data!.version;
             final String minVersion = config['minVersion'] ?? '1.0.0';
             final String updateUrl = config['updateUrl'] ?? '';
+
+            print(
+              '🔍 [VERSION_COMPARISON] Current: $currentVersion | Min Required: $minVersion',
+            );
 
             if (!_isVersionSupported(currentVersion, minVersion)) {
               // عرض شاشة التحديث الإجباري

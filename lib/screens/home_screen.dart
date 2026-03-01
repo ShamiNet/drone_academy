@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/main.dart';
 import 'package:drone_academy/screens/admin_dashboard.dart';
 import 'package:drone_academy/screens/equipment_checkout_screen.dart';
 import 'package:drone_academy/screens/inventory_screen.dart';
@@ -37,9 +38,13 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _photoUrl;
   bool _isLoading = true;
 
+  // Cache for lazy-loaded trainee screens
+  final Map<int, Widget> _traineeScreenCache = {};
+
   @override
   void initState() {
     super.initState();
+    PerformanceTracker.logTime('HOME_SCREEN_INIT_START');
     // ✅ تفعيل مراقبة الحظر عند فتح الصفحة الرئيسية
     ApiService().startUserStatusMonitoring(context);
     _loadUserData();
@@ -54,14 +59,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadUserData() async {
+    PerformanceTracker.logTime('LOAD_USER_DATA_START');
+
     var user = ApiService.currentUser;
 
     if (user == null) {
+      PerformanceTracker.logTime('AUTO_LOGIN_ATTEMPTING');
       await _apiService.tryAutoLogin();
+      PerformanceTracker.logTime('AUTO_LOGIN_DONE');
       user = ApiService.currentUser;
     }
 
     if (user != null) {
+      PerformanceTracker.logTime('USER_FOUND_SETTING_STATE');
       if (mounted) {
         setState(() {
           _userName = user!['displayName'];
@@ -73,8 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final uid = user['uid'] ?? user['id'];
       try {
+        PerformanceTracker.logTime('FETCH_FRESH_USER_START');
         final freshData = await _apiService.fetchUser(uid);
+        PerformanceTracker.logTime('FETCH_FRESH_USER_DONE');
+
         if (freshData != null && mounted) {
+          PerformanceTracker.logTime('UPDATE_UI_WITH_FRESH_DATA');
           setState(() {
             _userName = freshData['displayName'];
             _userRole = freshData['role'];
@@ -84,9 +98,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ApiService.currentUser = freshData;
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('cached_user_data', json.encode(freshData));
+          PerformanceTracker.logTime('CACHE_FRESH_DATA_DONE');
         }
       } catch (e) {
-        print("Failed to refresh user data: $e");
+        debugPrint("Failed to refresh user data: $e");
       }
     } else {
       if (mounted) {
@@ -95,6 +110,38 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
+
+    PerformanceTracker.logTime('HOME_SCREEN_FULLY_LOADED');
+  }
+
+  // ⚡ Lazy load trainee screens and cache them
+  Widget _getCachedScreen(int tabIndex) {
+    if (!_traineeScreenCache.containsKey(tabIndex)) {
+      late Widget screen;
+      switch (tabIndex) {
+        case 0:
+          PerformanceTracker.logTime('LOADING_TAB_TRAININGS');
+          screen = const TraineeDashboard();
+          break;
+        case 1:
+          PerformanceTracker.logTime('LOADING_TAB_COMPETITIONS');
+          screen = const TraineeCompetitionsScreen();
+          break;
+        case 2:
+          PerformanceTracker.logTime('LOADING_TAB_EQUIPMENT');
+          screen = const EquipmentCheckoutScreen();
+          break;
+        case 3:
+          PerformanceTracker.logTime('LOADING_TAB_INVENTORY');
+          screen = const InventoryScreen();
+          break;
+        default:
+          screen = const SizedBox();
+      }
+      _traineeScreenCache[tabIndex] = screen;
+    }
+
+    return _traineeScreenCache[tabIndex]!;
   }
 
   Widget _buildBody(AppLocalizations l10n) {
@@ -124,13 +171,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 Tab(text: l10n.inventory, icon: const Icon(Icons.all_inbox)),
               ],
             ),
-            const Expanded(
+            Expanded(
               child: TabBarView(
+                physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  TraineeDashboard(),
-                  TraineeCompetitionsScreen(),
-                  EquipmentCheckoutScreen(),
-                  InventoryScreen(),
+                  _getCachedScreen(0),
+                  _getCachedScreen(1),
+                  _getCachedScreen(2),
+                  _getCachedScreen(3),
                 ],
               ),
             ),

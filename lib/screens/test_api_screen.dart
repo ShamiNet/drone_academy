@@ -21,7 +21,7 @@ class _TestApiScreenState extends State<TestApiScreen> {
 
     try {
       // جلب المستخدمين
-      final users = await _apiService.fetchUsers();
+      final users = await _apiService.getUsers();
 
       if (users.isEmpty) {
         setState(() {

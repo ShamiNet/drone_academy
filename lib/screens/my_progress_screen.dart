@@ -28,7 +28,7 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
   }
 
   Future<void> _loadProgressData() async {
-    final trainings = await _apiService.fetchTrainings();
+    final trainings = await _apiService.getTrainings();
     final currentUserId =
         ApiService.currentUser?['uid'] ?? ApiService.currentUser?['id'];
 
@@ -37,7 +37,7 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
       return;
     }
 
-    final results = await _apiService.fetchResults(traineeUid: currentUserId);
+    final results = await _apiService.getResults(traineeUid: currentUserId);
     final uniqueCompletedIds = <String>{};
     for (var r in results) {
       uniqueCompletedIds.add(r['trainingId']);

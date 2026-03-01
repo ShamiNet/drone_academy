@@ -1759,7 +1759,7 @@ abstract class AppLocalizations {
   /// No description provided for @madeBy.
   ///
   /// In en, this message translates to:
-  /// **'v1.0.0 • Made with ❤️ by Shami'**
+  /// **'Made with ❤️ by Shami'**
   String get madeBy;
 }
 

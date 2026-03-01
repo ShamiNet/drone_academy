@@ -402,7 +402,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get selectLanguage => 'Выберите язык';
 
   @override
-  String get videoThumbnail => 'Video Thumbnail';
+  String get videoThumbnail => 'Миниатюра видео';
 
   @override
   String get analyzing => 'Анализируется...';
@@ -488,7 +488,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get totalChargeCycles => 'Общее количество зарядов (для батарей)';
 
   @override
-  String get lastMaintenanceDate => 'Дата последней ремонта (необязательно)';
+  String get lastMaintenanceDate =>
+      'Дата последнего обслуживания (необязательно)';
 
   @override
   String get noEquipmentAddedYet => 'Оборудование еще не добавлено.';
@@ -516,7 +517,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get notesOnReturn =>
-      'Заметки при возврате (например: разряженная батарея, незначительный трещина...)';
+      'Заметки при возврате (например: разряженная батарея, незначительная трещина...)';
 
   @override
   String get setFinalStatus => 'Установить окончательный статус';
@@ -675,10 +676,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get blockUser => 'Заблокировать пользователя';
 
   @override
-  String get userBlocked => 'User has been blocked.';
+  String get userBlocked => 'Пользователь заблокирован.';
 
   @override
-  String get userUnblocked => 'User has been unblocked.';
+  String get userUnblocked => 'Пользователь разблокирован.';
 
   @override
   String get reportReadyTitle => 'Отчет готов';
@@ -730,7 +731,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get inventoryList => 'Список инвентаря';
 
   @override
-  String get selectTrainee => 'Выберите стазера';
+  String get selectTrainee => 'Выберите стажера';
 
   @override
   String get withAiAnalysis => 'С анализом ИИ';
@@ -863,5 +864,5 @@ class AppLocalizationsRu extends AppLocalizations {
   String get generalSupervisor => 'Генеральный куратор';
 
   @override
-  String get madeBy => 'v1.0.0 • Сделано с ❤️ Shami';
+  String get madeBy => 'Сделано с ❤️ Shami';
 }

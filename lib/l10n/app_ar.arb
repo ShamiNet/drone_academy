@@ -64,7 +64,6 @@
     "noTrainingsAvailable": "لا توجد تدريبات متاحة بعد.",
     "notYetTrained": "لم يتم التدريب بعد",
     "noStepsYet": "لا توجد خطوات بعد. ابدأ بإضافة بعض الخطوات!",
-    "noTrainingsFound": "لا توجد تدريبات.", 
     "noUsersFound": "لا يوجد مستخدمون.",
     "trainingSteps": "خطوات التدريب",
     "trainers": "المدربون",
@@ -127,6 +126,7 @@
     "stepType": "نوع الخطوة",
     "checklist": "قائمة تحقق (نص)",
     "video": "فيديو",
+    "videoThumbnail": "صورة مصغرة للفيديو",
     "recenterView": "إعادة توسيط العرض",
     "viewManual": "عرض الدليل",
     "videoUrl": "رابط الفيديو (يوتيوب مثلاً)",
@@ -223,8 +223,14 @@
     "selectTrainee": "اختر متدرباً",
     "success": "نجاح",
     "appControl": "إعدادات التطبيق",
+    "reportReadyTitle": "التقرير جاهز",
+    "reportSavedSuccess": "تم حفظ التقرير بنجاح في التنزيلات.",
+    "reportReadyContent": "تم إنشاء تقريرك الشامل بنجاح. يمكنك الآن التصدير أو المشاركة كما تشاء.",
     "reportSavedSuccessfully": "تم حفظ التقرير بنجاح في التنزيلات.",
     "export": "تصدير",
+    "share": "مشاركة",
+    "saveToDownloads": "حفظ في التنزيلات",
+    "previewAndPrint": "معاينة وطباعة",
     "reportGeneratedSuccessfully": "تم إنشاء التقرير بنجاح.",
     "failed": "فشل",
     "exportFailed": "فشل التصدير. حاول مرة أخرى.",
@@ -272,5 +278,5 @@
     "scanQrCode": "أو امسح الباركود للتواصل السريع",
     "scanQrInstruction": "امسح الرمز باستخدام كاميرا هاتفك",
     "generalSupervisor": "المشرف العام",
-    "madeBy": "v1.0.0 • Made with ❤️ by Shami"
+    "madeBy": "Made with ❤️ by Shami"
 }

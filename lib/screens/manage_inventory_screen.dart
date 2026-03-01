@@ -21,6 +21,20 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
   final String currentUserName =
       FirebaseAuth.instance.currentUser?.displayName ?? 'Unknown';
 
+  late Future<List<dynamic>> _inventoryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _inventoryFuture = _apiService.getInventory();
+  }
+
+  Future<void> _refreshInventory() async {
+    setState(() {
+      _inventoryFuture = _apiService.getInventory(forceRefresh: true);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     const bgColor = Color(0xFF111318);
@@ -60,172 +74,184 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
   }
 
   Widget _buildInventoryListTab() {
-    return StreamBuilder<List<dynamic>>(
-      stream: _apiService.streamInventory(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final items = snapshot.data ?? [];
-        if (items.isEmpty) return _buildEmptyState();
+    return RefreshIndicator(
+      onRefresh: _refreshInventory,
+      child: FutureBuilder<List<dynamic>>(
+        future: _inventoryFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('خطأ: ${snapshot.error}'));
+          }
+          final items = snapshot.data ?? [];
+          if (items.isEmpty) return _buildEmptyState();
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E2230),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E2230),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                title: Text(
-                  item['name'] ?? '',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
-                  textAlign: TextAlign.right,
-                ),
-                subtitle: Text(
-                  '${item['availableQuantity']} / ${item['totalQuantity']} :الكمية المتاحة',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  textAlign: TextAlign.right,
-                ),
-                // --- تفعيل الانتقال للسجل ---
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => InventoryHistoryScreen(
-                      itemId: item['id'],
-                      itemName: item['name'],
+                  title: Text(
+                    item['name'] ?? '',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                  subtitle: Text(
+                    '${item['availableQuantity']} / ${item['totalQuantity']} :الكمية المتاحة',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    textAlign: TextAlign.right,
+                  ),
+                  // --- تفعيل الانتقال للسجل ---
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => InventoryHistoryScreen(
+                        itemId: item['id'],
+                        itemName: item['name'],
+                      ),
                     ),
                   ),
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () =>
+                            _showDeleteDialog(item['id'], item['name']),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        // --- تفعيل الانتقال للتعديل ---
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EditInventoryItemScreen(item: item),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildOperationsTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshInventory,
+      child: FutureBuilder<List<dynamic>>(
+        future: _inventoryFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('خطأ: ${snapshot.error}'));
+          }
+          final items = snapshot.data ?? [];
+          if (items.isEmpty) return _buildEmptyState();
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final int available = item['availableQuantity'] ?? 0;
+              final int total = item['totalQuantity'] ?? 1;
+              final double percent = (total > 0) ? (available / total) : 0.0;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E2230),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF2C3246)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () =>
-                          _showDeleteDialog(item['id'], item['name']),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            _buildOperationButton(
+                              l10n.checkIn,
+                              () => _showCheckInDialog(item),
+                              isPrimary: false,
+                            ),
+                            const SizedBox(width: 8),
+                            _buildOperationButton(
+                              l10n.checkOut,
+                              () => _showCheckoutDialog(item),
+                              isPrimary: true,
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              item['name'] ?? '',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'متاح: $available / $total',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.blue),
-                      // --- تفعيل الانتقال للتعديل ---
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EditInventoryItemScreen(item: item),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: percent,
+                        minHeight: 6,
+                        backgroundColor: Colors.grey.shade800,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF4CAF50),
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildOperationsTab() {
-    return StreamBuilder<List<dynamic>>(
-      stream: _apiService.streamInventory(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final items = snapshot.data ?? [];
-        if (items.isEmpty) return _buildEmptyState();
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            final int available = item['availableQuantity'] ?? 0;
-            final int total = item['totalQuantity'] ?? 1;
-            final double percent = (total > 0) ? (available / total) : 0.0;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E2230),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF2C3246)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          _buildOperationButton(
-                            l10n.checkIn,
-                            () => _showCheckInDialog(item),
-                            isPrimary: false,
-                          ),
-                          const SizedBox(width: 8),
-                          _buildOperationButton(
-                            l10n.checkOut,
-                            () => _showCheckoutDialog(item),
-                            isPrimary: true,
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            item['name'] ?? '',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'متاح: $available / $total',
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: percent,
-                      minHeight: 6,
-                      backgroundColor: Colors.grey.shade800,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF4CAF50),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:animate_do/animate_do.dart'; // تأكد أن المكتبة مضافة، أو يمكننا استخدام حركات Flutter العادية
+import 'package:drone_academy/main.dart';
 import 'package:drone_academy/screens/app_status_wrapper.dart';
 import 'package:drone_academy/screens/home_screen.dart';
 import 'package:drone_academy/screens/login_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SplashScreen extends StatefulWidget {
   final void Function(Locale) setLocale;
@@ -34,12 +36,23 @@ class _SplashScreenState extends State<SplashScreen> {
 
   int _currentTipIndex = 0;
   Timer? _tipTimer;
+  String _appVersion = '...';
 
   @override
   void initState() {
     super.initState();
+    PerformanceTracker.logTime('SPLASH_SCREEN_SHOWN');
+    _loadAppVersion();
     _startTipRotation(); // بدء تغيير النصائح
     _checkLoginStatus();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() {
+      _appVersion = info.version;
+    });
   }
 
   @override
@@ -60,14 +73,17 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
-    // وقت إضافي قليل للسماح للمستخدم بقراءة معلومة (اختياري)
-    await Future.delayed(const Duration(seconds: 4));
+    // ⚡ تقليل التأخير من 4 ثواني إلى 2 ثانية فقط (اللحد الأدنى لعرض الـ Splash)
+    await Future.delayed(const Duration(seconds: 2));
+    PerformanceTracker.logTime('SPLASH_DELAY_DONE');
 
     final isLoggedIn = await ApiService().tryAutoLogin();
+    PerformanceTracker.logTime('AUTO_LOGIN_CHECK_DONE');
 
     if (!mounted) return;
 
     if (isLoggedIn) {
+      PerformanceTracker.logTime('NAVIGATING_TO_HOME');
       // الكود الجديد ✅
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -81,6 +97,7 @@ class _SplashScreenState extends State<SplashScreen> {
         ),
       );
     } else {
+      PerformanceTracker.logTime('NAVIGATING_TO_LOGIN');
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const LoginScreen()),
       );
@@ -117,10 +134,10 @@ class _SplashScreenState extends State<SplashScreen> {
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF9800).withOpacity(0.2),
+                      color: const Color(0xFFFF9800).withValues(alpha: 0.2),
                       blurRadius: 30,
                       spreadRadius: 5,
                     ),
@@ -201,11 +218,11 @@ class _SplashScreenState extends State<SplashScreen> {
             const Spacer(),
 
             // رقم الإصدار في الأسفل
-            const Padding(
-              padding: EdgeInsets.only(bottom: 20),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
               child: Text(
-                "v1.0.2",
-                style: TextStyle(color: Colors.white24, fontSize: 12),
+                'v$_appVersion',
+                style: const TextStyle(color: Colors.white24, fontSize: 12),
               ),
             ),
           ],

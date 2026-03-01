@@ -59,7 +59,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             Center(
               child: FadeInUp(
                 child: Text(
-                  "آخر تحديث: 1 يناير 2025",
+                  "آخر تحديث: 1 يناير 2026",
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
               ),
@@ -131,7 +131,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               child: FadeInUp(
                 delay: const Duration(milliseconds: 900),
                 child: const Text(
-                  "Drone Academy © 2025",
+                  "Drone Academy © 2026. جميع الحقوق محفوظة.",
                   style: TextStyle(color: Colors.white24, fontSize: 12),
                 ),
               ),

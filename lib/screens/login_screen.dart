@@ -32,23 +32,55 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // دالة للتحقق من صحة البريد الإلكتروني
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+    return emailRegex.hasMatch(email);
+  }
+
+  // دالة للتحقق من قوة كلمة المرور
+  bool _isValidPassword(String password) {
+    // كلمة المرور يجب أن تكون 6 أحرف على الأقل
+    return password.length >= 6;
+  }
+
   Future<void> _login() async {
     final l10n = AppLocalizations.of(context)!;
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    // التحقق من عدم ترك الحقول فارغة
+    if (email.isEmpty || password.isEmpty) {
       AppNotifications.showError(
         context,
-        l10n.loginFailed,
-      ); // رسالة عامة أو "أدخل البيانات"
+        '⚠️ ${l10n.loginFailed}: يرجى ملء جميع الحقول', // Fill all fields
+      );
+      return;
+    }
+
+    // التحقق من صيغة البريد الإلكتروني
+    if (!_isValidEmail(email)) {
+      AppNotifications.showError(
+        context,
+        '📧 invalid email format. Please check your email address.',
+      );
+      return;
+    }
+
+    // التحقق من طول كلمة المرور
+    if (!_isValidPassword(password)) {
+      AppNotifications.showError(
+        context,
+        '🔐 Password must be at least 6 characters long.',
+      );
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final result = await _apiService.login(
-      _emailController.text.trim(),
-      _passwordController.text.trim(),
-    );
+    final result = await _apiService.login(email, password);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -70,17 +102,62 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (errorCode.contains('USER_BANNED')) {
         userMessage = l10n.userBannedMessage;
+      } else if (errorCode.contains('INVALID_LOGIN_CREDENTIALS')) {
+        userMessage =
+            '❌ ${l10n.loginFailed}\n\nThe email or password is incorrect.\n\n'
+            'Options:\n'
+            '1. Double-check your credentials\n'
+            '2. Create a new account if you don\'t have one';
+
+        // Show a dialog with helpful options
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('❌ Login Failed'),
+              content: const Text(
+                'The email or password is incorrect.\n\n'
+                'Please check your credentials or create a new account.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Try Again'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SignupScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Create Account'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      } else if (errorCode.contains('Connection error') ||
+          errorCode.contains('SocketException') ||
+          errorCode.contains('Failed host lookup')) {
+        userMessage =
+            '🌐 Network Error\n\n'
+            'Cannot connect to the server.\n\n'
+            'Please check your internet connection\n'
+            'and try again.';
       } else if (errorCode.contains('DEVICE_BANNED')) {
         // يمكن إضافة نص خاص للجهاز المحظور في ملفات اللغة لاحقاً
         String reason = result['reason'] ?? "";
         userMessage = "⛔ ${l10n.failed}: Device Banned ($reason)";
       } else if (errorCode.contains('EMAIL_NOT_FOUND') ||
-          errorCode.contains('INVALID_PASSWORD') ||
-          errorCode.contains('INVALID_LOGIN_CREDENTIALS')) {
-        userMessage = l10n.loginFailed; // أو رسالة "بيانات خاطئة"
-      } else if (errorCode.contains('Connection error') ||
-          errorCode.contains('SocketException')) {
-        userMessage = l10n.connectionError;
+          errorCode.contains('INVALID_PASSWORD')) {
+        userMessage =
+            '❌ Login Failed\n\n'
+            'Invalid email or password. Please try again.';
       }
 
       showCustomSnackBar(context, userMessage);

@@ -20,10 +20,12 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
   final ApiService _apiService = ApiService();
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  late Future<List<dynamic>> _usersFuture;
 
   @override
   void initState() {
     super.initState();
+    _usersFuture = _apiService.getUsers();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -35,6 +37,12 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onRefresh() async {
+    setState(() {
+      _usersFuture = _apiService.getUsers(forceRefresh: true);
+    });
   }
 
   @override
@@ -69,107 +77,129 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                 ),
               ),
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: DropdownButton<Locale>(
-                  value: Localizations.localeOf(context),
-                  dropdownColor: const Color(0xFF1E2230),
-                  style: const TextStyle(color: Colors.white),
-                  icon: const Icon(Icons.language, color: Colors.white),
-                  onChanged: (Locale? newLocale) {
-                    if (newLocale != null && widget.onLocaleChange != null) {
-                      widget.onLocaleChange!(newLocale);
-                    }
-                  },
-                  items: const [
-                    DropdownMenuItem(value: Locale('en'), child: Text('EN')),
-                    DropdownMenuItem(value: Locale('ar'), child: Text('AR')),
-                    DropdownMenuItem(value: Locale('ru'), child: Text('RU')),
-                  ],
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _onRefresh,
+                  ),
+                  DropdownButton<Locale>(
+                    value: Localizations.localeOf(context),
+                    dropdownColor: const Color(0xFF1E2230),
+                    style: const TextStyle(color: Colors.white),
+                    icon: const Icon(Icons.language, color: Colors.white),
+                    onChanged: (Locale? newLocale) {
+                      if (newLocale != null && widget.onLocaleChange != null) {
+                        widget.onLocaleChange!(newLocale);
+                      }
+                    },
+                    items: const [
+                      DropdownMenuItem(value: Locale('en'), child: Text('EN')),
+                      DropdownMenuItem(value: Locale('ar'), child: Text('AR')),
+                      DropdownMenuItem(value: Locale('ru'), child: Text('RU')),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
         ),
         Expanded(
-          child: StreamBuilder<List<dynamic>>(
-            stream: _apiService.streamUsers(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          child: RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: FutureBuilder<List<dynamic>>(
+              future: _usersFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              final users = snapshot.data ?? [];
-
-              // تصفية المتدربين فقط + البحث
-              final trainees = users.where((u) {
-                final role = u['role'];
-                if (role != 'trainee') return false;
-
-                final name = (u['displayName'] ?? '').toString().toLowerCase();
-                return name.contains(_searchQuery.toLowerCase());
-              }).toList();
-
-              if (trainees.isEmpty) {
-                return EmptyStateWidget(
-                  message: l10n.noTrainees,
-                  imagePath: 'assets/illustrations/no_data.svg',
-                );
-              }
-
-              return ListView.builder(
-                itemCount: trainees.length,
-                itemBuilder: (context, index) {
-                  final trainee = trainees[index]; // Map<String, dynamic>
-                  final name = trainee['displayName'] ?? 'Unknown';
-                  final email = trainee['email'] ?? 'No Email';
-                  final photoUrl = trainee['photoUrl'];
-
-                  return Card(
-                    color: const Color(0xFF1E2230),
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey.shade800,
-                        backgroundImage:
-                            (photoUrl != null && photoUrl.toString().isNotEmpty)
-                            ? CachedNetworkImageProvider(photoUrl)
-                            : null,
-                        child: (photoUrl == null || photoUrl.toString().isEmpty)
-                            ? const Icon(Icons.person, color: Colors.white)
-                            : null,
-                      ),
-                      title: Text(
-                        name,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      subtitle: Text(
-                        email,
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                      trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.grey,
-                        size: 16,
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => TraineeProfileScreen(
-                              traineeData: trainee,
-                            ), // تمرير الـ Map مباشرة
-                          ),
-                        );
-                      },
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'خطأ: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.white),
                     ),
                   );
-                },
-              );
-            },
+                }
+
+                final users = snapshot.data ?? [];
+
+                // تصفية المتدربين فقط + البحث
+                final trainees = users.where((u) {
+                  final role = u['role'];
+                  if (role != 'trainee') return false;
+
+                  final name = (u['displayName'] ?? '')
+                      .toString()
+                      .toLowerCase();
+                  return name.contains(_searchQuery.toLowerCase());
+                }).toList();
+
+                if (trainees.isEmpty) {
+                  return EmptyStateWidget(
+                    message: l10n.noTrainees,
+                    imagePath: 'assets/illustrations/no_data.svg',
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: trainees.length,
+                  itemBuilder: (context, index) {
+                    final trainee = trainees[index]; // Map<String, dynamic>
+                    final name = trainee['displayName'] ?? 'Unknown';
+                    final email = trainee['email'] ?? 'No Email';
+                    final photoUrl = trainee['photoUrl'];
+
+                    return Card(
+                      color: const Color(0xFF1E2230),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.grey.shade800,
+                          backgroundImage:
+                              (photoUrl != null &&
+                                  photoUrl.toString().isNotEmpty)
+                              ? CachedNetworkImageProvider(photoUrl)
+                              : null,
+                          child:
+                              (photoUrl == null || photoUrl.toString().isEmpty)
+                              ? const Icon(Icons.person, color: Colors.white)
+                              : null,
+                        ),
+                        title: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          email,
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.grey,
+                          size: 16,
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TraineeProfileScreen(
+                                traineeData: trainee,
+                              ), // تمرير الـ Map مباشرة
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ),
       ],

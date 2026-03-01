@@ -14,6 +14,7 @@ class LeaderboardScreen extends StatefulWidget {
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   final ApiService _apiService = ApiService();
+  late Future<List<dynamic>> _entriesFuture;
 
   String _formatMilliseconds(int milliseconds) {
     final minutes = (milliseconds / 60000).floor().toString().padLeft(2, '0');
@@ -26,6 +27,22 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _entriesFuture = _apiService.fetchCompetitionEntries(
+      widget.competition['id'],
+    );
+  }
+
+  Future<void> _onRefresh() async {
+    setState(() {
+      _entriesFuture = _apiService.fetchCompetitionEntries(
+        widget.competition['id'],
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     const bgColor = Color(0xFF111318);
 
@@ -35,83 +52,101 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         title: Text('${widget.competition['title']} - Leaderboard'),
         backgroundColor: bgColor,
         elevation: 0,
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _onRefresh),
+        ],
       ),
-      body: StreamBuilder<List<dynamic>>(
-        stream: _apiService.streamCompetitionEntries(widget.competition['id']),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: FutureBuilder<List<dynamic>>(
+          future: _entriesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final entries = snapshot.data ?? [];
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'خطأ: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              );
+            }
 
-          if (entries.isEmpty) {
-            return const EmptyStateWidget(
-              message: "No entries yet. Be the first!\nCheck back later!",
-              imagePath: 'assets/illustrations/no_data.svg',
+            final entries = snapshot.data ?? [];
+
+            if (entries.isEmpty) {
+              return const EmptyStateWidget(
+                message: "No entries yet. Be the first!\nCheck back later!",
+                imagePath: 'assets/illustrations/no_data.svg',
+              );
+            }
+
+            // الترتيب يتم في السيرفر، لكن للتأكد نرتب محلياً أيضاً
+            entries.sort(
+              (a, b) => (a['score'] as int).compareTo(b['score'] as int),
             );
-          }
 
-          // الترتيب يتم في السيرفر، لكن للتأكد نرتب محلياً أيضاً
-          entries.sort(
-            (a, b) => (a['score'] as int).compareTo(b['score'] as int),
-          );
+            return ListView.builder(
+              itemCount: entries.length,
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                final rank = index + 1;
 
-          return ListView.builder(
-            itemCount: entries.length,
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              final rank = index + 1;
+                Color medalColor = const Color(0xFF2C2C2C); // لون افتراضي داكن
+                Color textColor = Colors.white;
 
-              Color medalColor = const Color(0xFF2C2C2C); // لون افتراضي داكن
-              Color textColor = Colors.white;
+                if (rank == 1) {
+                  medalColor = Colors.amber;
+                  textColor = Colors.black;
+                } else if (rank == 2) {
+                  medalColor = Colors.grey.shade400;
+                  textColor = Colors.black;
+                } else if (rank == 3) {
+                  medalColor = const Color(0xFFA1887F); // برونزي
+                  textColor = Colors.black;
+                }
 
-              if (rank == 1) {
-                medalColor = Colors.amber;
-                textColor = Colors.black;
-              } else if (rank == 2) {
-                medalColor = Colors.grey.shade400;
-                textColor = Colors.black;
-              } else if (rank == 3) {
-                medalColor = const Color(0xFFA1887F); // برونزي
-                textColor = Colors.black;
-              }
-
-              return Card(
-                color: const Color(0xFF1E2230),
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: medalColor,
-                    child: Text(
-                      '$rank',
-                      style: TextStyle(
+                return Card(
+                  color: const Color(0xFF1E2230),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: medalColor,
+                      child: Text(
+                        '$rank',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      entry['traineeName'] ?? 'Unknown',
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        color: textColor,
+                      ),
+                    ),
+                    trailing: Text(
+                      _formatMilliseconds(entry['score'] ?? 0),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Color(0xFF8FA1B4),
                       ),
                     ),
                   ),
-                  title: Text(
-                    entry['traineeName'] ?? 'Unknown',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  trailing: Text(
-                    _formatMilliseconds(entry['score'] ?? 0),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Color(0xFF8FA1B4),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

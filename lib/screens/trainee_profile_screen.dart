@@ -44,6 +44,8 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   List<FlSpot> _chartData = [];
   String? _aiSummary;
   bool _isAnalyzing = false;
+  bool _canUseAI =
+      false; // فحص البريد الإلكتروني للسماح باستخدام الذكاء الاصطناعي
 
   // متغيرات التحكم
   bool _showOnlyWithResults = false;
@@ -70,7 +72,19 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _checkAIAccess(); // فحص صلاحيات الذكاء الاصطناعي
     _loadInitialData();
+  }
+
+  // فحص ما إذا كان المستخدم له صلاحية استخدام الذكاء الاصطناعي
+  Future<void> _checkAIAccess() async {
+    final user = ApiService.currentUser;
+    final hasAccess = user?['email'] == 'kloklop8@gmail.com';
+    if (mounted) {
+      setState(() {
+        _canUseAI = hasAccess;
+      });
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -79,7 +93,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   }
 
   Future<void> _loadAllTrainings() async {
-    final trainings = await _apiService.fetchTrainings();
+    final trainings = await _apiService.getTrainings();
     if (mounted) {
       setState(() {
         _allTrainings = trainings;
@@ -91,9 +105,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   Future<void> _loadProgressData() async {
     if (_allTrainings == null) return;
 
-    final traineeResults = await _apiService.fetchResults(
-      traineeUid: _traineeId,
-    );
+    final traineeResults = await _apiService.getResults(traineeUid: _traineeId);
     final totalCount = _allTrainings!.length;
     final uniqueCompletedIds = <String>{};
 
@@ -151,7 +163,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   }
 
   void _generateChartData(String trainingId) async {
-    final allResults = await _apiService.fetchResults(traineeUid: _traineeId);
+    final allResults = await _apiService.getResults(traineeUid: _traineeId);
     final filtered = allResults
         .where((r) => r['trainingId'] == trainingId)
         .toList();
@@ -173,7 +185,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
 
   Future<void> _analyzeNotes() async {
     setState(() => _isAnalyzing = true);
-    final notes = await _apiService.fetchDailyNotes(traineeUid: _traineeId);
+    final notes = await _apiService.getDailyNotes(traineeUid: _traineeId);
     final notesList = notes.map((doc) => doc['note'] as String).toList();
     final summary = await AiAnalyzerService.summarizeTraineeNotes(notesList);
 
@@ -326,8 +338,8 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
     );
 
     try {
-      final results = await _apiService.fetchResults(traineeUid: _traineeId);
-      final notes = await _apiService.fetchDailyNotes(traineeUid: _traineeId);
+      final results = await _apiService.getResults(traineeUid: _traineeId);
+      final notes = await _apiService.getDailyNotes(traineeUid: _traineeId);
       String? aiSummary = _aiSummary;
       if (aiSummary == null && notes.isNotEmpty) {
         final notesList = notes.map((doc) => doc['note'] as String).toList();
@@ -661,7 +673,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
                 const Center(child: CircularProgressIndicator())
               else if (_aiSummary != null)
                 AiSummaryWidget(summary: _aiSummary!)
-              else
+              else if (_canUseAI)
                 Center(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -671,6 +683,13 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
                     icon: const Icon(Icons.analytics),
                     label: Text(l10n.analyzeNotesNow),
                     onPressed: _analyzeNotes,
+                  ),
+                )
+              else
+                const Center(
+                  child: Text(
+                    'ميزة الذكاء الاصطناعي غير متاحة',
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ),
             ],
@@ -683,7 +702,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   // --- تبويب النتائج المحدث (التصميم الحديث + أزرار التحكم القديمة) ---
   Widget _buildResultsTab() {
     return FutureBuilder<List<dynamic>>(
-      future: _apiService.fetchResults(traineeUid: _traineeId),
+      future: _apiService.getResults(traineeUid: _traineeId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
@@ -1062,7 +1081,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
 
   // --- باقي الدوال (Dialogs) ---
   Future<void> _showAddResultDialog() async {
-    final trainings = await _apiService.fetchTrainings();
+    final trainings = await _apiService.getTrainings();
     String? selectedId;
     String? selectedTitle;
     double mastery = 80;
@@ -1232,7 +1251,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   }
 
   Future<void> _showSelectCompetitionDialog() async {
-    final competitions = await _apiService.fetchCompetitions();
+    final competitions = await _apiService.getCompetitions();
     if (!mounted) return;
     showDialog(
       context: context,
@@ -1286,7 +1305,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   }
 
   Future<void> _showCompetitionsForLeaderboard() async {
-    final comps = await _apiService.fetchCompetitions();
+    final comps = await _apiService.getCompetitions();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1329,7 +1348,7 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
       children: [
         Expanded(
           child: FutureBuilder<List<dynamic>>(
-            future: _apiService.fetchDailyNotes(traineeUid: _traineeId),
+            future: _apiService.getDailyNotes(traineeUid: _traineeId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting)
                 return const Center(child: CircularProgressIndicator());

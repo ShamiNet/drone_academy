@@ -15,8 +15,14 @@ class _AdminAppControlPanelState extends State<AdminAppControlPanel> {
 
   // المتغيرات
   bool _isEnabled = true;
+  bool _updateRequired = false;
+  final TextEditingController _latestVersionController =
+      TextEditingController();
   final TextEditingController _minVersionController = TextEditingController();
   final TextEditingController _updateUrlController = TextEditingController();
+  final TextEditingController _updateMessageController =
+      TextEditingController();
+  final TextEditingController _releaseNotesController = TextEditingController();
 
   @override
   void initState() {
@@ -28,27 +34,64 @@ class _AdminAppControlPanelState extends State<AdminAppControlPanel> {
     final config = await _apiService.fetchAppConfig();
     setState(() {
       _isEnabled = config['isEnabled'] ?? true;
+      _updateRequired = config['updateRequired'] ?? false;
+      _latestVersionController.text = config['latestVersion'] ?? '1.0.2';
       _minVersionController.text = config['minVersion'] ?? '1.0.0';
       _updateUrlController.text = config['updateUrl'] ?? '';
+      _updateMessageController.text =
+          config['updateMessage'] ?? 'تحديث جديد متاح';
+
+      // تحميل ملاحظات الإصدار
+      if (config['releaseLog'] != null &&
+          config['releaseLog']['highlights'] != null) {
+        final highlights = config['releaseLog']['highlights'] as List;
+        _releaseNotesController.text = highlights.join('\n');
+      }
+
       _isLoading = false;
     });
   }
 
   Future<void> _saveConfig() async {
     setState(() => _isLoading = true);
+
+    // تحويل ملاحظات الإصدار إلى قائمة
+    final highlights = _releaseNotesController.text
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
+
     final success = await _apiService.updateAppConfig({
       'isEnabled': _isEnabled,
-      'minVersion': _minVersionController.text
-          .trim(), // الرقم الذي سيوقف النسخ الأقدم منه
-      'updateUrl': _updateUrlController.text.trim(), // رابط المتجر
+      'updateRequired': _updateRequired,
+      'latestVersion': _latestVersionController.text.trim(),
+      'minVersion': _minVersionController.text.trim(),
+      'updateUrl': _updateUrlController.text.trim(),
+      'updateMessage': _updateMessageController.text.trim(),
+      'releaseLog': {
+        'appName': 'Drone Academy',
+        'version': _latestVersionController.text.trim(),
+        'highlights': highlights,
+      },
     });
+
     setState(() => _isLoading = false);
 
     if (success) {
-      AppNotifications.showSuccess(context, "تم تحديث إعدادات التطبيق بنجاح");
+      AppNotifications.showSuccess(context, "تم تحديث إعدادات التطبيق بنجاح ✅");
     } else {
       AppNotifications.showError(context, "فشل الحفظ");
     }
+  }
+
+  @override
+  void dispose() {
+    _minVersionController.dispose();
+    _updateUrlController.dispose();
+    _latestVersionController.dispose();
+    _updateMessageController.dispose();
+    _releaseNotesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -94,6 +137,68 @@ class _AdminAppControlPanelState extends State<AdminAppControlPanel> {
           const SizedBox(height: 10),
           const Text(
             "تنبيه: أي مستخدم لديه إصدار أقل من هذا الرقم سيتم إجباره على التحديث.",
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+
+          const SizedBox(height: 20),
+
+          TextField(
+            controller: _latestVersionController,
+            decoration: const InputDecoration(
+              labelText: "أحدث إصدار متاح (Latest Version)",
+              hintText: "مثال: 1.0.2",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.system_update),
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            "هذا هو رقم الإصدار الحالي الذي سيظهر للمستخدمين.",
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+
+          const SizedBox(height: 20),
+
+          SwitchListTile(
+            title: const Text("إجبار التحديث (Update Required)"),
+            subtitle: const Text(
+              "سيتم منع المستخدمين من استخدام التطبيق حتى يقوموا بالتحديث",
+            ),
+            value: _updateRequired,
+            onChanged: (val) => setState(() => _updateRequired = val),
+          ),
+
+          const SizedBox(height: 20),
+
+          TextField(
+            controller: _updateMessageController,
+            decoration: const InputDecoration(
+              labelText: "رسالة التحديث (Update Message)",
+              hintText: "تحديث جديد متاح",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.message),
+            ),
+            maxLines: 2,
+          ),
+
+          const SizedBox(height: 20),
+
+          TextField(
+            controller: _releaseNotesController,
+            decoration: const InputDecoration(
+              labelText: "ملاحظات الإصدار (Release Notes)",
+              hintText:
+                  "أضف سطر جديد لكل ميزة\nمثال:\n- تحسين الأداء\n- إصلاح مشاكل",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.notes),
+              alignLabelWithHint: true,
+            ),
+            maxLines: 5,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            "ضع كل ملاحظة في سطر منفصل (سيتم تحويلها تلقائياً إلى قائمة)",
             style: TextStyle(color: Colors.grey, fontSize: 12),
           ),
 

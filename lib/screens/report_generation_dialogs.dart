@@ -25,7 +25,7 @@ Future<void> generateAllTraineesReport(BuildContext context) async {
 
   try {
     print('📥 جاري جلب قائمة المتدربين...');
-    final allUsers = await _apiService.fetchUsers();
+    final allUsers = await _apiService.getUsers();
     final trainees = allUsers.where((u) {
       final role = (u['role'] ?? '').toString().toLowerCase();
       return role == 'trainee';
@@ -371,10 +371,10 @@ Future<void> _processAndShowSuccessDialog(
   try {
     print('📊 جاري جلب البيانات الأساسية...');
     final initialData = await Future.wait([
-      _apiService.fetchTrainings(),
-      _apiService.fetchUsers(),
-      _apiService.fetchResults(),
-      _apiService.fetchDailyNotes(),
+      _apiService.getTrainings(),
+      _apiService.getUsers(),
+      _apiService.getResults(),
+      _apiService.getDailyNotes(),
     ]).timeout(const Duration(seconds: 90));
 
     final allTrainings = initialData[0] as List<dynamic>;

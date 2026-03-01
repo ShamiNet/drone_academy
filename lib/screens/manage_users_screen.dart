@@ -22,9 +22,23 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   String _selectedManagerFilter = 'All';
   String _selectedUnitFilter = 'All';
 
+  late Future<List<dynamic>> _usersFuture;
+
   final Color _bgColor = const Color(0xFF111318);
   final Color _cardColor = const Color(0xFF1E2230);
   final Color _orangeColor = const Color(0xFFFF9800);
+
+  @override
+  void initState() {
+    super.initState();
+    _usersFuture = _apiService.getUsers();
+  }
+
+  Future<void> _onRefresh() async {
+    setState(() {
+      _usersFuture = _apiService.getUsers(forceRefresh: true);
+    });
+  }
 
   Color _getUnitColor(String? unitType) {
     if (unitType == 'markazia') return const Color(0xFF9C27B0);
@@ -137,356 +151,373 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
     return Scaffold(
       backgroundColor: _bgColor,
-      body: StreamBuilder<List<dynamic>>(
-        stream: _apiService.streamUsers(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: FutureBuilder<List<dynamic>>(
+          future: _usersFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final allUsers = snapshot.data ?? [];
-          final managers = allUsers.where((u) {
-            final r = (u['role'] ?? '').toString().toLowerCase();
-            return r == 'owner' || r == 'admin' || r == 'trainer';
-          }).toList();
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'خطأ: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              );
+            }
 
-          final filteredUsers = allUsers.where((user) {
-            final name = (user['displayName'] ?? '').toString().toLowerCase();
-            final email = (user['email'] ?? '').toString().toLowerCase();
-            final role = (user['role'] ?? 'trainee').toString().toLowerCase();
-            final parentId = user['parentId'] ?? '';
-            final unitType = user['unitType'] ?? '';
+            final allUsers = snapshot.data ?? [];
+            final managers = allUsers.where((u) {
+              final r = (u['role'] ?? '').toString().toLowerCase();
+              return r == 'owner' || r == 'admin' || r == 'trainer';
+            }).toList();
 
-            bool matchesSearch =
-                name.contains(_searchQuery.toLowerCase()) ||
-                email.contains(_searchQuery.toLowerCase());
-            bool matchesRole =
-                _selectedRoleFilter == 'All' ||
-                role == _selectedRoleFilter.toLowerCase();
-            bool matchesManager =
-                _selectedManagerFilter == 'All' ||
-                parentId == _selectedManagerFilter;
-            bool matchesUnit =
-                _selectedUnitFilter == 'All' || unitType == _selectedUnitFilter;
+            final filteredUsers = allUsers.where((user) {
+              final name = (user['displayName'] ?? '').toString().toLowerCase();
+              final email = (user['email'] ?? '').toString().toLowerCase();
+              final role = (user['role'] ?? 'trainee').toString().toLowerCase();
+              final parentId = user['parentId'] ?? '';
+              final unitType = user['unitType'] ?? '';
 
-            return matchesSearch &&
-                matchesRole &&
-                matchesManager &&
-                matchesUnit;
-          }).toList();
+              bool matchesSearch =
+                  name.contains(_searchQuery.toLowerCase()) ||
+                  email.contains(_searchQuery.toLowerCase());
+              bool matchesRole =
+                  _selectedRoleFilter == 'All' ||
+                  role == _selectedRoleFilter.toLowerCase();
+              bool matchesManager =
+                  _selectedManagerFilter == 'All' ||
+                  parentId == _selectedManagerFilter;
+              bool matchesUnit =
+                  _selectedUnitFilter == 'All' ||
+                  unitType == _selectedUnitFilter;
 
-          filteredUsers.sort((a, b) {
-            int orderA = _getRoleOrder(a['role'] ?? '');
-            int orderB = _getRoleOrder(b['role'] ?? '');
-            return orderA.compareTo(orderB);
-          });
+              return matchesSearch &&
+                  matchesRole &&
+                  matchesManager &&
+                  matchesUnit;
+            }).toList();
 
-          return Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16.0),
-                color: _bgColor,
-                child: Column(
-                  children: [
-                    TextField(
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: l10n.searchTrainee,
-                        hintStyle: const TextStyle(color: Colors.grey),
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Colors.grey,
+            filteredUsers.sort((a, b) {
+              int orderA = _getRoleOrder(a['role'] ?? '');
+              int orderB = _getRoleOrder(b['role'] ?? '');
+              return orderA.compareTo(orderB);
+            });
+
+            return Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  color: _bgColor,
+                  child: Column(
+                    children: [
+                      TextField(
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: l10n.searchTrainee,
+                          hintStyle: const TextStyle(color: Colors.grey),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.grey,
+                          ),
+                          filled: true,
+                          fillColor: _cardColor,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0,
+                          ),
                         ),
-                        filled: true,
-                        fillColor: _cardColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        onChanged: (val) => setState(() => _searchQuery = val),
                       ),
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                    ),
-                    const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 120,
-                            child: _buildDropdownFilter(
-                              value: _selectedRoleFilter,
-                              label: l10n.role,
-                              items: [
-                                DropdownMenuItem(
-                                  value: 'All',
-                                  child: Text(l10n.all),
-                                ),
-                                // ✅ تم إضافة هذا الخيار لتجنب المشاكل في الفلترة أيضاً
-                                DropdownMenuItem(
-                                  value: 'owner',
-                                  child: Text(
-                                    l10n.generalSupervisor,
-                                  ), // ✅ "المشرف العام"
-                                ),
-                                DropdownMenuItem(
-                                  value: 'admin',
-                                  child: Text(l10n.admin),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'trainer',
-                                  child: Text(l10n.trainers),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'trainee',
-                                  child: Text(l10n.trainees),
-                                ),
-                              ],
-                              onChanged: (val) =>
-                                  setState(() => _selectedRoleFilter = val!),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 130,
-                            child: _buildDropdownFilter(
-                              value: _selectedUnitFilter,
-                              label: l10n.unitType,
-                              items: [
-                                DropdownMenuItem(
-                                  value: 'All',
-                                  child: Text(l10n.all),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'liwa',
-                                  child: Text(l10n.liwa),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'markazia',
-                                  child: Text(l10n.markazia),
-                                ),
-                              ],
-                              onChanged: (val) =>
-                                  setState(() => _selectedUnitFilter = val!),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (_selectedRoleFilter == 'trainee' ||
-                              _selectedRoleFilter == 'All')
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
                             SizedBox(
-                              width: 150,
+                              width: 120,
                               child: _buildDropdownFilter(
-                                value: _selectedManagerFilter,
-                                label: l10n.filterByManager,
+                                value: _selectedRoleFilter,
+                                label: l10n.role,
                                 items: [
                                   DropdownMenuItem(
                                     value: 'All',
-                                    child: Text(l10n.allManagers),
+                                    child: Text(l10n.all),
                                   ),
-                                  ...managers.map(
-                                    (m) => DropdownMenuItem(
-                                      value: m['id'] ?? m['uid'],
-                                      child: Text(
-                                        m['displayName'] ?? 'Unknown',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
+                                  // ✅ تم إضافة هذا الخيار لتجنب المشاكل في الفلترة أيضاً
+                                  DropdownMenuItem(
+                                    value: 'owner',
+                                    child: Text(
+                                      l10n.generalSupervisor,
+                                    ), // ✅ "المشرف العام"
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'admin',
+                                    child: Text(l10n.admin),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'trainer',
+                                    child: Text(l10n.trainers),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'trainee',
+                                    child: Text(l10n.trainees),
                                   ),
                                 ],
-                                onChanged: (val) => setState(
-                                  () => _selectedManagerFilter = val!,
-                                ),
+                                onChanged: (val) =>
+                                    setState(() => _selectedRoleFilter = val!),
                               ),
                             ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: filteredUsers.isEmpty
-                    ? Center(
-                        child: Text(
-                          l10n.noResultsFound,
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: filteredUsers.length,
-                        itemBuilder: (context, index) {
-                          final user = filteredUsers[index];
-                          final isBlocked = user['isBlocked'] == true;
-                          final String role = user['role'] ?? 'trainee';
-                          final String photoUrl = user['photoUrl'] ?? '';
-                          final Color roleColor = _getRoleColor(role);
-                          final String unitType = user['unitType'] ?? '';
-
-                          final Color cardBackground = unitType.isNotEmpty
-                              ? _getUnitColor(unitType).withOpacity(0.15)
-                              : _cardColor;
-
-                          final Color borderColor = unitType.isNotEmpty
-                              ? _getUnitColor(unitType).withOpacity(0.5)
-                              : Colors.transparent;
-
-                          return Card(
-                            color: cardBackground,
-                            margin: const EdgeInsets.only(bottom: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(
-                                color: isBlocked ? Colors.red : borderColor,
-                                width: isBlocked ? 1.5 : 1,
-                              ),
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              leading: GestureDetector(
-                                onTap: () => _navigateToUserProfileInfo(user),
-                                child: Hero(
-                                  tag:
-                                      'user_avatar_${user['id'] ?? user['uid']}',
-                                  child: Stack(
-                                    children: [
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: roleColor,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        child: CircleAvatar(
-                                          radius: 28,
-                                          backgroundColor: Colors.grey.shade800,
-                                          backgroundImage: (photoUrl.isNotEmpty)
-                                              ? CachedNetworkImageProvider(
-                                                  photoUrl,
-                                                )
-                                              : null,
-                                          child: (photoUrl.isEmpty)
-                                              ? const Icon(
-                                                  Icons.person,
-                                                  color: Colors.white,
-                                                  size: 28,
-                                                )
-                                              : null,
-                                        ),
-                                      ),
-                                      if (isBlocked)
-                                        Positioned(
-                                          right: 0,
-                                          bottom: 0,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: Colors.red,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.block,
-                                              size: 12,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 130,
+                              child: _buildDropdownFilter(
+                                value: _selectedUnitFilter,
+                                label: l10n.unitType,
+                                items: [
+                                  DropdownMenuItem(
+                                    value: 'All',
+                                    child: Text(l10n.all),
                                   ),
-                                ),
+                                  DropdownMenuItem(
+                                    value: 'liwa',
+                                    child: Text(l10n.liwa),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'markazia',
+                                    child: Text(l10n.markazia),
+                                  ),
+                                ],
+                                onChanged: (val) =>
+                                    setState(() => _selectedUnitFilter = val!),
                               ),
-                              title: Text(
-                                user['displayName'] ?? 'No Name',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    user['email'] ?? '',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
+                            ),
+                            const SizedBox(width: 8),
+                            if (_selectedRoleFilter == 'trainee' ||
+                                _selectedRoleFilter == 'All')
+                              SizedBox(
+                                width: 150,
+                                child: _buildDropdownFilter(
+                                  value: _selectedManagerFilter,
+                                  label: l10n.filterByManager,
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: 'All',
+                                      child: Text(l10n.allManagers),
                                     ),
-                                  ),
-                                  if (unitType.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _getUnitColor(unitType),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
+                                    ...managers.map(
+                                      (m) => DropdownMenuItem(
+                                        value: m['id'] ?? m['uid'],
                                         child: Text(
-                                          unitType == 'liwa'
-                                              ? l10n.liwa
-                                              : l10n.markazia,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                          m['displayName'] ?? 'Unknown',
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              trailing: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: roleColor.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: roleColor.withOpacity(0.5),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _getRoleIcon(role),
-                                      color: roleColor,
-                                      size: 14,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      _getRoleLabel(role, l10n),
-                                      style: TextStyle(
-                                        color: roleColor,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ],
+                                  onChanged: (val) => setState(
+                                    () => _selectedManagerFilter = val!,
+                                  ),
                                 ),
                               ),
-                              onTap: () => _navigateToUserProfile(user),
-                              onLongPress: () =>
-                                  _showUserOptions(context, user, allUsers),
-                            ),
-                          );
-                        },
+                          ],
+                        ),
                       ),
-              ),
-            ],
-          );
-        },
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: filteredUsers.isEmpty
+                      ? Center(
+                          child: Text(
+                            l10n.noResultsFound,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filteredUsers.length,
+                          itemBuilder: (context, index) {
+                            final user = filteredUsers[index];
+                            final isBlocked = user['isBlocked'] == true;
+                            final String role = user['role'] ?? 'trainee';
+                            final String photoUrl = user['photoUrl'] ?? '';
+                            final Color roleColor = _getRoleColor(role);
+                            final String unitType = user['unitType'] ?? '';
+
+                            final Color cardBackground = unitType.isNotEmpty
+                                ? _getUnitColor(unitType).withOpacity(0.15)
+                                : _cardColor;
+
+                            final Color borderColor = unitType.isNotEmpty
+                                ? _getUnitColor(unitType).withOpacity(0.5)
+                                : Colors.transparent;
+
+                            return Card(
+                              color: cardBackground,
+                              margin: const EdgeInsets.only(bottom: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: isBlocked ? Colors.red : borderColor,
+                                  width: isBlocked ? 1.5 : 1,
+                                ),
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                leading: GestureDetector(
+                                  onTap: () => _navigateToUserProfileInfo(user),
+                                  child: Hero(
+                                    tag:
+                                        'user_avatar_${user['id'] ?? user['uid']}',
+                                    child: Stack(
+                                      children: [
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: roleColor,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: CircleAvatar(
+                                            radius: 28,
+                                            backgroundColor:
+                                                Colors.grey.shade800,
+                                            backgroundImage:
+                                                (photoUrl.isNotEmpty)
+                                                ? CachedNetworkImageProvider(
+                                                    photoUrl,
+                                                  )
+                                                : null,
+                                            child: (photoUrl.isEmpty)
+                                                ? const Icon(
+                                                    Icons.person,
+                                                    color: Colors.white,
+                                                    size: 28,
+                                                  )
+                                                : null,
+                                          ),
+                                        ),
+                                        if (isBlocked)
+                                          Positioned(
+                                            right: 0,
+                                            bottom: 0,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: const BoxDecoration(
+                                                color: Colors.red,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.block,
+                                                size: 12,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  user['displayName'] ?? 'No Name',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user['email'] ?? '',
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    if (unitType.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _getUnitColor(unitType),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            unitType == 'liwa'
+                                                ? l10n.liwa
+                                                : l10n.markazia,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: roleColor.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: roleColor.withOpacity(0.5),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _getRoleIcon(role),
+                                        color: roleColor,
+                                        size: 14,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _getRoleLabel(role, l10n),
+                                        style: TextStyle(
+                                          color: roleColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                onTap: () => _navigateToUserProfile(user),
+                                onLongPress: () =>
+                                    _showUserOptions(context, user, allUsers),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(

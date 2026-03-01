@@ -1,5 +1,6 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 // تأكد من وجود المكتبة في pubspec.yaml أو استخدم أيقونات Material البديلة كما فعلت في الكود
 // import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -224,9 +225,17 @@ class ContactDeveloperScreen extends StatelessWidget {
             const SizedBox(height: 30),
 
             // Footer
-            const Text(
-              "v1.0.0 • Made with ❤️ by Shami",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                final version = snapshot.hasData
+                    ? 'v${snapshot.data!.version}'
+                    : 'v...';
+                return Text(
+                  '$version • Made with ❤️ by Shami',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                );
+              },
             ),
             const SizedBox(height: 30),
           ],

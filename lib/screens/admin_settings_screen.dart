@@ -116,7 +116,7 @@ class AdminSettingsScreen extends StatelessWidget {
           _buildSectionHeader('حول التطبيق'),
           _buildSettingItem(
             title: 'رقم الإصدار',
-            subtitle: 'v1.0.2 (Stable)',
+            subtitle: 'عرض معلومات الإصدار الحالي',
             icon: Icons.info_outline,
             onTap: () {
               Navigator.push(
@@ -165,7 +165,7 @@ class AdminSettingsScreen extends StatelessWidget {
           const SizedBox(height: 40),
           const Center(
             child: Text(
-              "Drone Academy © 2025",
+              "Drone Academy © 2026",
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ),
