@@ -558,6 +558,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inventory => 'Inventory';
 
   @override
+  String get inventoryAccessPermission =>
+      'Inventory and Equipment Access Permission';
+
+  @override
   String get quantityToCheckout => 'Quantity to Checkout';
 
   @override

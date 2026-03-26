@@ -339,6 +339,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     icon: Icons.person_outline,
                     title: l10n
                         .editProfile, // "تعديل الملف الشخصي" (أو الملف الشخصي)
+                    color: Colors.blueAccent,
                     onTap: () {
                       Navigator.pop(context);
                       _goToProfile();
@@ -347,6 +348,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _buildDrawerItem(
                     icon: Icons.settings_outlined,
                     title: l10n.appControl, // "إعدادات التطبيق" (العامة)
+                    color: Colors.greenAccent,
                     onTap: () {
                       Navigator.pop(context);
                       _goToSettings();
@@ -355,6 +357,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _buildDrawerItem(
                     icon: Icons.auto_awesome,
                     title: "مساعد الذكاء الاصطناعي",
+                    color: Colors.purpleAccent,
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
@@ -368,6 +371,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _buildDrawerItem(
                     icon: Icons.history_edu,
                     title: "سجل استعلامات الذكاء الاصطناعي",
+                    color: Colors.lightBlueAccent,
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
@@ -381,6 +385,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _buildDrawerItem(
                     icon: Icons.wb_sunny_outlined,
                     title: "المظهر (Theme)", // يمكن تعريبها
+                    color: Colors.orangeAccent,
                     onTap: () {
                       Navigator.pop(context);
                       _showThemeDialog();
@@ -391,6 +396,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     icon: Icons.help_outline,
                     title: l10n
                         .contactDeveloperTitle, // "تواصل مع المطور" أو الدعم
+                    color: Colors.yellowAccent,
                     onTap: () {
                       Navigator.pop(context);
                       _goToSupport();
@@ -403,7 +409,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                     title: const Text(
                       "سجل الأخطاء (للمطور)", // يمكن تعريبها
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: Colors.redAccent),
                     ),
                     onTap: () {
                       Navigator.pop(context);

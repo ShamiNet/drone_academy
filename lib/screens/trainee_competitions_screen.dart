@@ -96,6 +96,7 @@ class _TraineeCompetitionsScreenState extends State<TraineeCompetitionsScreen> {
                         MaterialPageRoute(
                           builder: (context) => CompetitionDetailsScreen(
                             competition: competition,
+                            viewOnly: true, // تفعيل وضع المشاهدة
                           ),
                         ),
                       );

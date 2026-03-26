@@ -2,6 +2,7 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/utils/organization_mapping.dart';
 import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
   String _selectedRole = 'trainee';
   String? _selectedParentId;
   String? _selectedUnitType; // الوحدة
+  String? _selectedDivision; // اللواء
   String? _selectedMaritalStatus; // الحالة الاجتماعية
   bool _isLoading = false;
 
@@ -72,6 +74,8 @@ class _AddUserScreenState extends State<AddUserScreen> {
           'parentId': _selectedParentId ?? '',
           // الحقول الجديدة
           'unitType': _selectedUnitType ?? '',
+          'division': _selectedDivision ?? '',
+          'affiliation': affiliationFromDivision(_selectedDivision),
           'maritalStatus': _selectedMaritalStatus ?? '',
           'recommendation': _recommendationController.text,
           'photoUrl': '',
@@ -287,6 +291,61 @@ class _AddUserScreenState extends State<AddUserScreen> {
                                 ],
                                 onChanged: (val) =>
                                     setState(() => _selectedUnitType = val),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildInputCard(
+                            label: "اللواء",
+                            icon: Icons.flag,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedDivision,
+                                hint: Text(
+                                  "اختر",
+                                  style: TextStyle(color: Colors.grey.shade600),
+                                ),
+                                dropdownColor: _cardColor,
+                                style: const TextStyle(color: Colors.white),
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  color: Colors.grey,
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'اللواء الأول',
+                                    child: Text('اللواء الأول'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'اللواء الثاني',
+                                    child: Text('اللواء الثاني'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'اللواء الثالث',
+                                    child: Text('اللواء الثالث'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'اللواء الرابع',
+                                    child: Text('اللواء الرابع'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'المدفعية',
+                                    child: Text('المدفعية'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'المركزية',
+                                    child: Text('المركزية'),
+                                  ),
+                                ],
+                                onChanged: (val) =>
+                                    setState(() => _selectedDivision = val),
                               ),
                             ),
                           ),

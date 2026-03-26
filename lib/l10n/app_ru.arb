@@ -181,6 +181,7 @@
     "availableQuantity": "Доступное количество",
     "noInventoryItems": "В инвентаре нет оборудования.",
     "inventory": "Инвентарь",
+    "inventoryAccessPermission": "Разрешение на доступ к инвентарю и оборудованию",
     "quantityToCheckout": "Количество для выдачи",
     "quantityToReturn": "Количество для возврата",
     "quantityLost": "Количество потерянных/поврежденных",

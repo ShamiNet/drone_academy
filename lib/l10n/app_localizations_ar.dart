@@ -558,6 +558,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get inventory => 'المخزون';
 
   @override
+  String get inventoryAccessPermission => 'صلاحية الوصول للمخزون والمعدات';
+
+  @override
   String get quantityToCheckout => 'الكمية المراد سحبها';
 
   @override

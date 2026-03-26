@@ -21,6 +21,13 @@ class TrainingDetailsScreen extends StatefulWidget {
 
 class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
   final ApiService _apiService = ApiService();
+  int _progressVersion = 0;
+
+  String? get _viewerId {
+    return FirebaseAuth.instance.currentUser?.uid ??
+        ApiService.currentUser?['uid'] ??
+        ApiService.currentUser?['id'];
+  }
 
   Future<void> _launchURL(String url) async {
     final uri = Uri.parse(url);
@@ -33,15 +40,28 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
     }
   }
 
-  void _onStepCompleted(bool isCompleted, String stepId) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+  Future<void> _onStepCompleted(bool isCompleted, String stepId) async {
+    final userId = _viewerId;
     if (userId == null) return;
 
-    await _apiService.setStepProgress(
+    final success = await _apiService.setStepProgress(
       userId,
       widget.training['id'],
       stepId,
       isCompleted,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _progressVersion++;
+      });
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تعذر تحديث حالة الخطوة، حاول مرة أخرى')),
     );
   }
 
@@ -51,7 +71,7 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
     final String title = widget.training['title'] ?? 'No Title';
     final String description =
         widget.training['description'] ?? 'No Description';
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = _viewerId;
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -107,6 +127,9 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
 
               // الاستماع للتقدم من السيرفر
               return StreamBuilder<List<dynamic>>(
+                key: ValueKey(
+                  '${widget.training['id']}_$userId$_progressVersion',
+                ),
                 stream: (userId != null)
                     ? _apiService.streamStepProgress(
                         userId,
@@ -149,6 +172,7 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
                         child: CheckboxListTile(
                           title: Text(stepTitle),
                           value: isCompleted,
+                          controlAffinity: ListTileControlAffinity.leading,
                           onChanged: (bool? value) {
                             if (value != null) {
                               _onStepCompleted(value, stepId);

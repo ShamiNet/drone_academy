@@ -20,6 +20,15 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
   int _totalTrainings = 0;
   bool _isLoading = true;
   List<dynamic> _results = [];
+  List<dynamic> _competitionResults = [];
+
+  String _formatCompetitionScore(dynamic score) {
+    final milliseconds = (score as num?)?.toInt() ?? 0;
+    final minutes = (milliseconds ~/ 60000).toString().padLeft(2, '0');
+    final seconds = ((milliseconds % 60000) ~/ 1000).toString().padLeft(2, '0');
+    final ms = (milliseconds % 1000).toString().padLeft(3, '0');
+    return '$minutes:$seconds:$ms';
+  }
 
   @override
   void initState() {
@@ -38,6 +47,8 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
     }
 
     final results = await _apiService.getResults(traineeUid: currentUserId);
+    final competitionResults = await _apiService
+        .getCompetitionEntriesForTrainee(traineeUid: currentUserId);
     final uniqueCompletedIds = <String>{};
     for (var r in results) {
       uniqueCompletedIds.add(r['trainingId']);
@@ -51,6 +62,7 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
             ? (_completedTrainings / _totalTrainings)
             : 0.0;
         _results = results;
+        _competitionResults = competitionResults;
         _isLoading = false;
       });
     }
@@ -102,39 +114,93 @@ class _MyProgressScreenState extends State<MyProgressScreen> {
                 ),
                 const Divider(thickness: 2),
                 Expanded(
-                  child: _results.isEmpty
+                  child: (_results.isEmpty && _competitionResults.isEmpty)
                       ? EmptyStateWidget(
                           message: l10n.noResultsRecorded,
                           imagePath: 'assets/illustrations/no_data.svg',
                         )
-                      : ListView.builder(
-                          itemCount: _results.length,
-                          itemBuilder: (context, index) {
-                            final result = _results[index];
-                            DateTime date = DateTime.now();
-                            if (result['date'] != null)
-                              date = DateTime.parse(result['date']);
-
-                            return Card(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 4,
-                              ),
-                              child: ListTile(
-                                title: Text(result['trainingTitle'] ?? ''),
-                                subtitle: Text(
-                                  DateFormat.yMMMd().add_jm().format(date),
-                                ),
-                                trailing: Text(
-                                  '${result['masteryPercentage']}%',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                      : ListView(
+                          children: [
+                            if (_results.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                                child: Text(
+                                  'نتائج التدريبات',
+                                  style: TextStyle(
                                     fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
-                            );
-                          },
+                              ..._results.map((result) {
+                                DateTime date = DateTime.now();
+                                if (result['date'] != null) {
+                                  date = DateTime.parse(result['date']);
+                                }
+
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 4,
+                                  ),
+                                  child: ListTile(
+                                    title: Text(result['trainingTitle'] ?? ''),
+                                    subtitle: Text(
+                                      DateFormat.yMMMd().add_jm().format(date),
+                                    ),
+                                    trailing: Text(
+                                      '${result['masteryPercentage']}%',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                            if (_competitionResults.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                                child: Text(
+                                  'نتائج المسابقات',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              ..._competitionResults.map((result) {
+                                DateTime date = DateTime.now();
+                                if (result['date'] != null) {
+                                  date = DateTime.parse(result['date']);
+                                }
+
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 4,
+                                  ),
+                                  child: ListTile(
+                                    title: Text(
+                                      result['competitionTitle'] ?? 'مسابقة',
+                                    ),
+                                    subtitle: Text(
+                                      DateFormat.yMMMd().add_jm().format(date),
+                                    ),
+                                    trailing: Text(
+                                      _formatCompetitionScore(result['score']),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
                         ),
                 ),
               ],

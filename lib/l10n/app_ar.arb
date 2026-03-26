@@ -181,6 +181,7 @@
     "checkOutItem": "سحب صنف",
     "noInventoryItems": "لا توجد قطع في المخزون.",
     "inventory": "المخزون",
+    "inventoryAccessPermission": "صلاحية الوصول للمخزون والمعدات",
     "quantityToCheckout": "الكمية المراد سحبها",
     "quantityToReturn": "الكمية المرجعة",
     "quantityLost": "الكمية المفقودة/التالفة",

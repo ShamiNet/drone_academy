@@ -60,7 +60,7 @@ class UserDetailsScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (isMe)
+          if (amIAdmin || isMe)
             FadeInRight(
               child: Container(
                 margin: const EdgeInsets.only(right: 16),
@@ -74,7 +74,8 @@ class UserDetailsScreen extends StatelessWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ProfileScreen(setLocale: (l) {}),
+                      builder: (context) =>
+                          ProfileScreen(setLocale: (l) {}, userData: userData),
                     ),
                   ),
                 ),
@@ -108,36 +109,41 @@ class UserDetailsScreen extends StatelessWidget {
                   bottom: -60,
                   child: FadeInDown(
                     duration: const Duration(milliseconds: 800),
-                    child: Hero(
-                      tag:
-                          'user_avatar_${userData['uid'] ?? userData['id']}', // Hero Animation
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: bgColor,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.5),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: CircleAvatar(
-                          radius: 70,
-                          backgroundColor: cardColor,
-                          backgroundImage:
-                              (photoUrl != null && photoUrl.isNotEmpty)
-                              ? CachedNetworkImageProvider(photoUrl)
-                              : null,
-                          child: (photoUrl == null)
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 70,
-                                  color: Colors.grey,
-                                )
-                              : null,
+                    child: GestureDetector(
+                      onTap: (photoUrl != null && photoUrl.isNotEmpty)
+                          ? () => _showFullscreenImage(context, photoUrl)
+                          : null,
+                      child: Hero(
+                        tag:
+                            'user_avatar_${userData['uid'] ?? userData['id']}', // Hero Animation
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: bgColor,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.5),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: CircleAvatar(
+                            radius: 70,
+                            backgroundColor: cardColor,
+                            backgroundImage:
+                                (photoUrl != null && photoUrl.isNotEmpty)
+                                ? CachedNetworkImageProvider(photoUrl)
+                                : null,
+                            child: (photoUrl == null)
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 70,
+                                    color: Colors.grey,
+                                  )
+                                : null,
+                          ),
                         ),
                       ),
                     ),
@@ -493,6 +499,45 @@ class UserDetailsScreen extends StatelessWidget {
     } catch (e) {
       return dateString ?? '';
     }
+  }
+
+  static void _showFullscreenImage(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(8),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Stack(
+            children: [
+              Container(
+                color: Colors.black.withOpacity(0.9),
+                child: Center(
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    placeholder: (context, url) =>
+                        const Center(child: CircularProgressIndicator()),
+                    errorWidget: (context, url, error) => const Center(
+                      child: Icon(Icons.error, color: Colors.white, size: 50),
+                    ),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 16,
+                right: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -1186,6 +1186,12 @@ abstract class AppLocalizations {
   /// **'Inventory'**
   String get inventory;
 
+  /// No description provided for @inventoryAccessPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Inventory and Equipment Access Permission'**
+  String get inventoryAccessPermission;
+
   /// No description provided for @quantityToCheckout.
   ///
   /// In en, this message translates to:

@@ -39,6 +39,41 @@ class ApiService {
   static Map<String, dynamic>? currentUser;
   static const String _userKey = 'cached_user_data';
 
+  int _asInt(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  List<dynamic> _sortTrainingsList(List<dynamic> trainings) {
+    final sorted = List<dynamic>.from(trainings);
+    sorted.sort((a, b) {
+      final levelComparison = _asInt(a['level']).compareTo(_asInt(b['level']));
+      if (levelComparison != 0) return levelComparison;
+
+      final orderComparison = _asInt(
+        a['order'],
+        fallback: 999999,
+      ).compareTo(_asInt(b['order'], fallback: 999999));
+      if (orderComparison != 0) return orderComparison;
+
+      final titleA = (a['title'] ?? '').toString().toLowerCase();
+      final titleB = (b['title'] ?? '').toString().toLowerCase();
+      return titleA.compareTo(titleB);
+    });
+    return sorted;
+  }
+
+  Future<void> _invalidateCacheKey(String key) async {
+    _memoryCache.remove(key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(key);
+  }
+
+  Future<void> _invalidateTrainingsCache() async {
+    await _invalidateCacheKey('CACHE_TRAININGS');
+  }
+
   // نظام مراقبة حالة المستخدم (الحظر)
   // ===========================================================================
 
@@ -503,10 +538,12 @@ class ApiService {
 
   Future<bool> updateUser(Map<String, dynamic> userData) async {
     try {
+      final dataToSend = Map<String, dynamic>.from(userData);
+      dataToSend['requester'] = currentUser;
       final response = await http.post(
         Uri.parse('$baseUrl/users'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(userData),
+        body: json.encode(dataToSend),
       );
       if (response.statusCode != 200) _logError("UPDATE_USER", response.body);
       return response.statusCode == 200;
@@ -524,6 +561,80 @@ class ApiService {
     } catch (e) {
       _logError("DELETE_USER", e.toString());
       return false;
+    }
+  }
+
+  // --- 🆕 جلب المستخدمين حسب التبعية (Affiliation) ---
+  Future<List<dynamic>> getUsersByAffiliation(String affiliation) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/by-affiliation/$affiliation'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      _logError("GET_USERS_BY_AFFILIATION", response.body);
+      return [];
+    } catch (e) {
+      _logError("GET_USERS_BY_AFFILIATION", e.toString());
+      return [];
+    }
+  }
+
+  // --- 🆕 جلب المستخدمين حسب التبعية والدور ---
+  Future<List<dynamic>> getUsersByAffiliationAndRole(
+    String affiliation,
+    String role,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/by-affiliation-and-role/$affiliation/$role'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      _logError("GET_USERS_BY_AFFILIATION_AND_ROLE", response.body);
+      return [];
+    } catch (e) {
+      _logError("GET_USERS_BY_AFFILIATION_AND_ROLE", e.toString());
+      return [];
+    }
+  }
+
+  // --- 🆕 جلب جميع المستخدمين مع فلترة اختيارية ---
+  Future<List<dynamic>> getUsersFiltered({
+    String? role,
+    String? affiliation,
+  }) async {
+    try {
+      String url = '$baseUrl/users';
+      final params = <String, String>{};
+
+      if (role != null) params['role'] = role;
+      if (affiliation != null) params['affiliation'] = affiliation;
+
+      if (params.isNotEmpty) {
+        final queryString = params.entries
+            .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+            .join('&');
+        url = '$url?$queryString';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      _logError("GET_USERS_FILTERED", response.body);
+      return [];
+    } catch (e) {
+      _logError("GET_USERS_FILTERED", e.toString());
+      return [];
     }
   }
 
@@ -755,7 +866,14 @@ class ApiService {
     try {
       final response = await http.get(Uri.parse('$baseUrl/trainings'));
       if (response.statusCode == 200) {
-        return List<dynamic>.from(json.decode(response.body));
+        final trainings = _sortTrainingsList(
+          List<dynamic>.from(json.decode(response.body)),
+        );
+        _log(
+          "FETCH_TRAININGS",
+          "Loaded ${trainings.length} trainings: ${trainings.map((t) => '${t['title'] ?? t['id']}[L${t['level'] ?? '-'}|O${t['order'] ?? '-'}]').join(' | ')}",
+        );
+        return trainings;
       }
       _logError("FETCH_TRAININGS", "Status: ${response.statusCode}");
       return [];
@@ -772,7 +890,10 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode == 200) return json.decode(response.body)['id'];
+      if (response.statusCode == 200) {
+        await _invalidateTrainingsCache();
+        return json.decode(response.body)['id'];
+      }
       _logError("ADD_TRAINING", response.body);
       return null;
     } catch (e) {
@@ -790,6 +911,9 @@ class ApiService {
       );
       if (response.statusCode != 200)
         _logError("UPDATE_TRAINING", response.body);
+      if (response.statusCode == 200) {
+        await _invalidateTrainingsCache();
+      }
       return response.statusCode == 200;
     } catch (e) {
       _logError("UPDATE_TRAINING", e.toString());
@@ -802,9 +926,56 @@ class ApiService {
       final response = await http.delete(Uri.parse('$baseUrl/trainings/$id'));
       if (response.statusCode != 200)
         _logError("DELETE_TRAINING", response.body);
+      if (response.statusCode == 200) {
+        await _invalidateTrainingsCache();
+      }
       return response.statusCode == 200;
     } catch (e) {
       _logError("DELETE_TRAINING", e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> updateTrainingOrders(List<dynamic> trainings) async {
+    try {
+      _log(
+        "UPDATE_TRAINING_ORDER",
+        "Sending ${trainings.length} reordered trainings: ${trainings.map((t) => '${t['id']}=>${t['order']}').join(', ')}",
+      );
+      final payload = {
+        'trainings': trainings
+            .map(
+              (training) => {'id': training['id'], 'order': training['order']},
+            )
+            .toList(),
+      };
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/trainings/reorder'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(payload),
+      );
+
+      if (response.statusCode != 200) {
+        _logError("UPDATE_TRAINING_ORDER", response.body);
+        return false;
+      }
+
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      final returnedTrainings = (decoded['trainings'] as List<dynamic>? ?? []);
+      _log(
+        "UPDATE_TRAINING_ORDER",
+        "Server persisted ${returnedTrainings.length} trainings: ${returnedTrainings.map((t) => '${t['id']}=>${t['order']}').join(', ')}",
+      );
+
+      await _invalidateTrainingsCache();
+      _log(
+        "UPDATE_TRAINING_ORDER",
+        "Trainings cache invalidated after reorder",
+      );
+      return true;
+    } catch (e) {
+      _logError("UPDATE_TRAINING_ORDER", e.toString());
       return false;
     }
   }
@@ -878,7 +1049,7 @@ class ApiService {
       cacheKey: 'CACHE_TRAININGS',
       fetcher: fetchTrainings,
       forceRefresh: forceRefresh,
-    );
+    ).then(_sortTrainingsList);
   }
 
   // جلب المعدات
@@ -1213,6 +1384,37 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> fetchCompetitionEntriesForTrainee(
+    String traineeUid,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$baseUrl/competition_entries?traineeUid=${Uri.encodeQueryComponent(traineeUid)}',
+        ),
+      );
+      if (response.statusCode == 200) {
+        return List<dynamic>.from(json.decode(response.body));
+      }
+      _logError("FETCH_TRAINEE_COMP_ENTRIES", "Status: ${response.statusCode}");
+      return [];
+    } catch (e) {
+      _logError("FETCH_TRAINEE_COMP_ENTRIES", e.toString());
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getCompetitionEntriesForTrainee({
+    required String traineeUid,
+    bool forceRefresh = false,
+  }) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_COMP_ENTRIES_TRAINEE_$traineeUid',
+      fetcher: () => fetchCompetitionEntriesForTrainee(traineeUid),
+      forceRefresh: forceRefresh,
+    );
+  }
+
   Future<bool> addCompetitionEntry(Map<String, dynamic> data) async {
     try {
       final response = await http.post(
@@ -1220,8 +1422,10 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200)
+      if (response.statusCode != 200) {
         _logError("ADD_COMP_ENTRY", response.body);
+        return false;
+      }
       return true;
     } catch (e) {
       _logError("ADD_COMP_ENTRY", e.toString());
@@ -1379,6 +1583,7 @@ class ApiService {
     bool isCompleted,
   ) async {
     try {
+      final cacheKey = 'CACHE_STEP_${uid}_$tid';
       http.Response response;
       if (isCompleted) {
         response = await http.post(
@@ -1398,7 +1603,16 @@ class ApiService {
           body: json.encode({'userId': uid, 'trainingId': tid, 'stepId': sid}),
         );
       }
-      if (response.statusCode != 200) _logError("SET_PROGRESS", response.body);
+      if (response.statusCode != 200) {
+        _logError("SET_PROGRESS", response.body);
+        return false;
+      }
+
+      await _invalidateCacheKey(cacheKey);
+      _log(
+        "SET_PROGRESS",
+        "Updated step progress uid=$uid tid=$tid sid=$sid completed=$isCompleted and invalidated $cacheKey",
+      );
       return true;
     } catch (e) {
       _logError("SET_PROGRESS", e.toString());
@@ -1556,6 +1770,8 @@ class ApiService {
     required Map<String, bool> scope,
     String mode = 'general',
     int limit = 50, // ⚡ حد افتراضي 50 بدلاً من 200 لتقليل الاستهلاك
+    String editId = '', // ID للتعديل
+    String trainingId = '', // ID للتدريب عند التعامل مع الخطوات
   }) async {
     try {
       // ⚡ تحقق من وجود نفس الاستعلام في الذاكرة المؤقتة
@@ -1578,6 +1794,8 @@ class ApiService {
           'mode': mode,
           'scope': scope,
           'limit': limit, // ⚡ إرسال الحد للسيرفر
+          'editId': editId, // إرسال ID للتعديل
+          'trainingId': trainingId, // إرسال ID للتدريب
           'requester': {
             'uid': user?['uid'] ?? user?['id'],
             'role': user?['role'],
@@ -1818,7 +2036,10 @@ class ApiService {
       final jsonList = history.map((q) => q.toJson()).toList();
       await prefs.setString(_aiHistoryKey, json.encode(jsonList));
 
-      _log("AI_HISTORY", "Saved query: ${query.question.substring(0, 30)}...");
+      final preview = query.question.length > 30
+          ? '${query.question.substring(0, 30)}...'
+          : query.question;
+      _log("AI_HISTORY", "Saved query: $preview");
       return true;
     } catch (e) {
       _logError("AI_HISTORY_SAVE", e.toString());

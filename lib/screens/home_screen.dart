@@ -37,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _userRole;
   String? _photoUrl;
   bool _isLoading = true;
+  bool _hasInventoryAccess = false; // صلاحية الوصول للمخزون والمعدات
 
   // Cache for lazy-loaded trainee screens
   final Map<int, Widget> _traineeScreenCache = {};
@@ -77,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _userName = user!['displayName'];
           _userRole = user!['role'];
           _photoUrl = user!['photoUrl'];
+          _hasInventoryAccess = user!['hasInventoryAccess'] ?? false;
           _isLoading = false;
         });
       }
@@ -93,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _userName = freshData['displayName'];
             _userRole = freshData['role'];
             _photoUrl = freshData['photoUrl'];
+            _hasInventoryAccess = freshData['hasInventoryAccess'] ?? false;
           });
 
           ApiService.currentUser = freshData;
@@ -153,33 +156,35 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_userRole == 'trainer') {
       return TrainerDashboard(onLocaleChange: widget.setLocale);
     } else if (_userRole == 'trainee') {
+      // بناء قائمة التبويبات بناءً على الصلاحيات
+      List<Tab> tabs = [
+        Tab(text: l10n.trainings, icon: const Icon(Icons.model_training)),
+      ];
+      List<Widget> tabViews = [
+        _getCachedScreen(0), // trainings
+      ];
+
+      // إضافة المعدات والمخزون فقط إذا كان لدى المستخدم صلاحية
+      if (_hasInventoryAccess) {
+        tabs.addAll([
+          Tab(text: l10n.equipment, icon: const Icon(Icons.construction)),
+          Tab(text: l10n.inventory, icon: const Icon(Icons.all_inbox)),
+        ]);
+        tabViews.addAll([
+          _getCachedScreen(2), // equipment
+          _getCachedScreen(3), // inventory
+        ]);
+      }
+
       return DefaultTabController(
-        length: 4,
+        length: tabs.length,
         child: Column(
           children: [
-            TabBar(
-              tabs: [
-                Tab(
-                  text: l10n.trainings,
-                  icon: const Icon(Icons.model_training),
-                ),
-                Tab(
-                  text: l10n.competitions,
-                  icon: const Icon(Icons.emoji_events),
-                ),
-                Tab(text: l10n.equipment, icon: const Icon(Icons.construction)),
-                Tab(text: l10n.inventory, icon: const Icon(Icons.all_inbox)),
-              ],
-            ),
+            TabBar(tabs: tabs),
             Expanded(
               child: TabBarView(
                 physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _getCachedScreen(0),
-                  _getCachedScreen(1),
-                  _getCachedScreen(2),
-                  _getCachedScreen(3),
-                ],
+                children: tabViews,
               ),
             ),
           ],

@@ -4,6 +4,7 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cropperx/cropperx.dart';
 import 'package:drone_academy/l10n/app_localizations.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/utils/organization_mapping.dart';
 import 'package:drone_academy/widgets/language_selector.dart';
 import 'package:drone_academy/widgets/loading_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,7 +13,8 @@ import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
   final void Function(Locale) setLocale;
-  const ProfileScreen({super.key, required this.setLocale});
+  final Map<String, dynamic>? userData;
+  const ProfileScreen({super.key, required this.setLocale, this.userData});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -40,6 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // --- الحقول الجديدة (Dropdowns) ---
   String? _selectedMaritalStatus;
   String? _selectedUnitType;
+  String? _selectedAffiliation;
   int _selectedLevel = 1;
 
   Map<String, dynamic>? _user;
@@ -54,7 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final Color _primaryColor = const Color(0xFFFF9800);
 
   bool get _isSupervisor {
-    final role = (_user?['role'] ?? ApiService.currentUser?['role'] ?? '')
+    final role = (ApiService.currentUser?['role'] ?? '')
         .toString()
         .toLowerCase();
     return role == 'owner' || role == 'admin';
@@ -63,7 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _user = ApiService.currentUser;
+    _user = widget.userData ?? ApiService.currentUser;
     _loadUserData();
   }
 
@@ -110,6 +113,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ut = null;
           }
           _selectedUnitType = ut;
+
+          String? affiliation = data['affiliation'];
+          if (affiliation != null &&
+              (affiliation.isEmpty ||
+                  ![
+                    'first',
+                    'second',
+                    'third',
+                    'fourth',
+                    'artillery',
+                    'central',
+                  ].contains(affiliation))) {
+            affiliation = null;
+          }
+          _selectedAffiliation = affiliation;
+
           _selectedLevel = int.tryParse(data['level']?.toString() ?? '') ?? 1;
 
           _isLoading = false;
@@ -201,6 +220,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _showFullscreenImage() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(8),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Stack(
+            children: [
+              Container(
+                color: Colors.black.withOpacity(0.9),
+                child: Center(
+                  child: CachedNetworkImage(
+                    imageUrl: _photoUrl!,
+                    placeholder: (context, url) =>
+                        const Center(child: CircularProgressIndicator()),
+                    errorWidget: (context, url, error) => const Center(
+                      child: Icon(Icons.error, color: Colors.white, size: 50),
+                    ),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 16,
+                right: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveProfile() async {
     final l10n = AppLocalizations.of(context)!;
     if (_user != null) {
@@ -224,6 +282,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'recommendation': _recommendationController.text,
         'maritalStatus': _selectedMaritalStatus ?? '',
         'unitType': _selectedUnitType ?? '',
+        'affiliation': _selectedAffiliation ?? '',
+        'division': divisionFromAffiliation(_selectedAffiliation),
       };
 
       if (_isSupervisor) {
@@ -232,7 +292,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       await _apiService.updateUser(updatedData);
 
-      if (ApiService.currentUser != null) {
+      if (ApiService.currentUser != null &&
+          uid == ApiService.currentUser!['uid']) {
         ApiService.currentUser!.addAll(updatedData);
       }
 
@@ -285,16 +346,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Center(
               child: Stack(
                 children: [
-                  CircleAvatar(
-                    radius: 60,
-                    backgroundColor: _cardColor,
-                    backgroundImage:
-                        (_photoUrl != null && _photoUrl!.isNotEmpty)
-                        ? CachedNetworkImageProvider(_photoUrl!)
+                  GestureDetector(
+                    onTap: (_photoUrl != null && _photoUrl!.isNotEmpty)
+                        ? () => _showFullscreenImage()
                         : null,
-                    child: (_photoUrl == null)
-                        ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                        : null,
+                    child: CircleAvatar(
+                      radius: 60,
+                      backgroundColor: _cardColor,
+                      backgroundImage:
+                          (_photoUrl != null && _photoUrl!.isNotEmpty)
+                          ? CachedNetworkImageProvider(_photoUrl!)
+                          : null,
+                      child: (_photoUrl == null)
+                          ? const Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Colors.grey,
+                            )
+                          : null,
+                    ),
                   ),
                   if (_isUploading)
                     const Positioned.fill(child: CircularProgressIndicator()),
@@ -333,6 +403,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.badge,
               label: "الرقم العسكري",
               controller: _militaryNumController,
+            ),
+            _buildTextField(
+              icon: Icons.person_pin,
+              label: "اللقب",
+              controller: _nicknameController,
+            ),
+
+            // --- اختيار التبعية ---
+            _buildDropdownField(
+              icon: Icons.group_work,
+              label: "التبعية",
+              value: _selectedAffiliation,
+              items: const [
+                DropdownMenuItem(value: 'first', child: Text('الأول')),
+                DropdownMenuItem(value: 'second', child: Text('الثاني')),
+                DropdownMenuItem(value: 'third', child: Text('الثالث')),
+                DropdownMenuItem(value: 'fourth', child: Text('الرابع')),
+                DropdownMenuItem(value: 'artillery', child: Text('المدفعية')),
+                DropdownMenuItem(value: 'central', child: Text('المركزية')),
+              ],
+              onChanged: (val) => setState(() => _selectedAffiliation = val),
             ),
 
             // --- اختيار نوع الوحدة ---

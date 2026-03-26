@@ -105,6 +105,11 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
                     horizontal: 16,
                     vertical: 8,
                   ),
+                  leading: const Icon(
+                    Icons.inventory_2,
+                    color: Colors.white70,
+                    size: 30,
+                  ),
                   title: Text(
                     item['name'] ?? '',
                     style: const TextStyle(
@@ -128,7 +133,7 @@ class _ManageInventoryScreenState extends State<ManageInventoryScreen> {
                       ),
                     ),
                   ),
-                  leading: Row(
+                  trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(

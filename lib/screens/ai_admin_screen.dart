@@ -3,6 +3,9 @@ import 'package:drone_academy/utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class AiAdminScreen extends StatefulWidget {
   const AiAdminScreen({super.key});
@@ -33,11 +36,17 @@ class _AiAdminScreenState extends State<AiAdminScreen> {
   bool _isCached = false; // ⚡ لعرض إشعار عند استخدام الذاكرة المؤقتة
   bool _canUseAI =
       false; // فحص البريد الإلكتروني للسماح باستخدام الذكاء الاصطناعي
+  String _editId = ''; // ID للتعديل
+  String _trainingId = ''; // ID للتدريب عند إضافة/تعديل خطوات
+  List<Map<String, dynamic>> _trainings = []; // قائمة التدريبات للاختيار
+  List<Map<String, dynamic>> _competitions = []; // قائمة المنافسات للاختيار
+  List<Map<String, dynamic>> _equipment = []; // قائمة المعدات للاختيار
 
   @override
   void initState() {
     super.initState();
     _checkAIAccess();
+    _loadTrainings();
   }
 
   // فحص ما إذا كان المستخدم له صلاحية استخدام الذكاء الاصطناعي
@@ -47,6 +56,23 @@ class _AiAdminScreenState extends State<AiAdminScreen> {
     setState(() {
       _canUseAI = hasAccess;
     });
+  }
+
+  // جلب قائمة التدريبات والمنافسات والمعدات للاختيار
+  Future<void> _loadTrainings() async {
+    try {
+      final trainings = await _apiService.getTrainings();
+      final competitions = await _apiService.getCompetitions();
+      final equipment = await _apiService.getEquipment();
+      setState(() {
+        _trainings = trainings.cast<Map<String, dynamic>>();
+        _competitions = competitions.cast<Map<String, dynamic>>();
+        _equipment = equipment.cast<Map<String, dynamic>>();
+      });
+    } catch (e) {
+      // في حالة الخطأ، يمكن ترك القوائم فارغة
+      print('Failed to load trainings/competitions/equipment: $e');
+    }
   }
 
   @override
@@ -86,6 +112,8 @@ class _AiAdminScreenState extends State<AiAdminScreen> {
       scope: scope,
       mode: _mode,
       limit: _limit, // ⚡ تمرير الحد للـ API
+      editId: _editId, // إرسال ID للتعديل
+      trainingId: _trainingId, // إرسال ID للتدريب
     );
 
     if (!mounted) return;
@@ -125,6 +153,125 @@ ___________
 تم إنشاؤها بواسطة مساعد الذكاء الاصطناعي - Drone Academy
 ''';
       Share.share(shareText, subject: 'نتيجة استعلام الذكاء الاصطناعي');
+    }
+  }
+
+  /// تصدير النتيجة إلى PDF
+  Future<void> _exportToPdf() async {
+    if (_answer == null) return;
+
+    try {
+      final question = _questionController.text.trim();
+
+      // تحميل خط عربي من الأصول
+      final arabicFont = await PdfGoogleFonts.cairoRegular();
+      final arabicBoldFont = await PdfGoogleFonts.cairoBold();
+
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          textDirection: pw.TextDirection.rtl,
+          theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBoldFont),
+          build: (context) => [
+            // الترويسة
+            pw.Header(
+              level: 0,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'تقرير الذكاء الاصطناعي',
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    'Drone Academy',
+                    style: const pw.TextStyle(
+                      fontSize: 14,
+                      color: PdfColors.grey,
+                    ),
+                  ),
+                  pw.Divider(thickness: 2),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            // السؤال
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.blue50,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'السؤال:',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(question, style: const pw.TextStyle(fontSize: 14)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            // الإجابة
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.green50,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'الإجابة:',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    _answer!,
+                    style: const pw.TextStyle(fontSize: 13, lineSpacing: 1.5),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 30),
+            // التذييل
+            pw.Text(
+              'تاريخ التوليد: ${DateTime.now().toString().substring(0, 16)}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+            ),
+          ],
+        ),
+      );
+
+      // حفظ ومشاركة PDF
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'AI_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+
+      if (mounted) {
+        showCustomSnackBar(context, '✅ تم تصدير التقرير بنجاح');
+      }
+    } catch (e) {
+      if (mounted) {
+        showCustomSnackBar(context, '❌ فشل تصدير PDF: $e');
+      }
     }
   }
 
@@ -179,9 +326,17 @@ ___________
                 TextField(
                   controller: _questionController,
                   maxLines: 4,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'السؤال أو الطلب',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'مسح النص',
+                      onPressed: () {
+                        _questionController.clear();
+                        setState(() {});
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -203,12 +358,130 @@ ___________
                       value: 'recommend',
                       child: Text('توصيات تدريب'),
                     ),
+                    DropdownMenuItem(
+                      value: 'add_training',
+                      child: Text('إضافة تدريب جديد'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'edit_training',
+                      child: Text('تعديل تدريب موجود'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'add_competition',
+                      child: Text('إضافة مسابقة جديدة'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'edit_competition',
+                      child: Text('تعديل مسابقة موجودة'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'add_equipment',
+                      child: Text('إضافة معدات جديدة'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'edit_equipment',
+                      child: Text('تعديل معدات موجودة'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'add_training_steps',
+                      child: Text('إضافة خطوات تدريب'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'edit_training_steps',
+                      child: Text('تعديل خطوات تدريب'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value == null) return;
                     setState(() => _mode = value);
                   },
                 ),
+                if (_mode.startsWith('edit_'))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: _mode == 'edit_training'
+                        ? DropdownButtonFormField<String>(
+                            initialValue: _editId.isNotEmpty ? _editId : null,
+                            decoration: const InputDecoration(
+                              labelText: 'اختر التدريب للتعديل',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _trainings.map((training) {
+                              return DropdownMenuItem<String>(
+                                value: training['id'],
+                                child: Text(
+                                  training['title'] ?? 'تدريب بدون اسم',
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() => _editId = value ?? '');
+                            },
+                          )
+                        : _mode == 'edit_competition'
+                        ? DropdownButtonFormField<String>(
+                            initialValue: _editId.isNotEmpty ? _editId : null,
+                            decoration: const InputDecoration(
+                              labelText: 'اختر المسابقة للتعديل',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _competitions.map((competition) {
+                              return DropdownMenuItem<String>(
+                                value: competition['id'],
+                                child: Text(
+                                  competition['title'] ?? 'مسابقة بدون اسم',
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() => _editId = value ?? '');
+                            },
+                          )
+                        : _mode == 'edit_equipment'
+                        ? DropdownButtonFormField<String>(
+                            initialValue: _editId.isNotEmpty ? _editId : null,
+                            decoration: const InputDecoration(
+                              labelText: 'اختر المعدات للتعديل',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _equipment.map((item) {
+                              return DropdownMenuItem<String>(
+                                value: item['id'],
+                                child: Text(item['name'] ?? 'معدات بدون اسم'),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() => _editId = value ?? '');
+                            },
+                          )
+                        : TextField(
+                            decoration: InputDecoration(
+                              labelText: 'معرف العنصر المراد تعديله (ID)',
+                              border: const OutlineInputBorder(),
+                            ),
+                            onChanged: (value) => _editId = value,
+                          ),
+                  ),
+                if (_mode.contains('training_steps'))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _trainingId.isNotEmpty ? _trainingId : null,
+                      decoration: const InputDecoration(
+                        labelText: 'اختر التدريب',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _trainings.map((training) {
+                        return DropdownMenuItem<String>(
+                          value: training['id'],
+                          child: Text(training['title'] ?? 'تدريب بدون اسم'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() => _trainingId = value ?? '');
+                      },
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 const Text(
                   'نطاق البيانات المسموح بها:',
@@ -391,6 +664,16 @@ ___________
                                 tooltip: 'مشاركة النتيجة',
                                 color: Colors.green.shade700,
                                 onPressed: _shareResult,
+                              ),
+                              // زر تصدير PDF
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.picture_as_pdf,
+                                  size: 20,
+                                ),
+                                tooltip: 'تصدير PDF',
+                                color: Colors.green.shade700,
+                                onPressed: _exportToPdf,
                               ),
                             ],
                           ),

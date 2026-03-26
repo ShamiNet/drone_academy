@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:drone_academy/screens/leaderboard_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:flutter/material.dart';
 
@@ -60,7 +61,7 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
     final traineeId = widget.traineeDoc['id'] ?? widget.traineeDoc['uid'];
     final traineeName = widget.traineeDoc['displayName'] ?? 'Unknown';
 
-    await _apiService.addCompetitionEntry({
+    final saved = await _apiService.addCompetitionEntry({
       'competitionId': widget.competition['id'],
       'competitionTitle': widget.competition['title'],
       'traineeUid': traineeId,
@@ -69,13 +70,32 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
       'date': DateTime.now().toIso8601String(),
     });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Result for $traineeName has been saved!')),
-      );
-      Navigator.of(context).pop();
+    if (!mounted) {
+      return;
     }
+
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('فشل حفظ النتيجة. حاول مرة أخرى.')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('تم حفظ نتيجة $traineeName بنجاح.')));
+
     _stopwatch.reset();
+    setState(() {
+      _result = '00:00:000';
+    });
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) =>
+            LeaderboardScreen(competition: widget.competition),
+      ),
+    );
   }
 
   @override

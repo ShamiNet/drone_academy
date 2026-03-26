@@ -1,4 +1,5 @@
 import 'package:drone_academy/l10n/app_localizations.dart';
+import 'package:drone_academy/screens/competition_details_screen.dart';
 import 'package:drone_academy/screens/edit_competition_screen.dart';
 import 'package:drone_academy/screens/leaderboard_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
@@ -77,6 +78,11 @@ class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
                         vertical: 8,
                       ),
                       child: ListTile(
+                        leading: const Icon(
+                          Icons.emoji_events,
+                          color: Colors.amber,
+                          size: 30,
+                        ),
                         title: Text(
                           comp['title'] ?? '',
                           style: const TextStyle(color: Colors.white),
@@ -91,12 +97,29 @@ class _ManageCompetitionsTabState extends State<ManageCompetitionsTab> {
                                 : Colors.red,
                           ),
                         ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CompetitionDetailsScreen(
+                                competition: comp,
+                                viewOnly: false,
+                              ),
+                            ),
+                          );
+                        },
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () {},
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      EditCompetitionScreen(competition: comp),
+                                ),
+                              ),
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),

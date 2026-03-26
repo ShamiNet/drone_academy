@@ -563,6 +563,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get inventory => 'Инвентарь';
 
   @override
+  String get inventoryAccessPermission =>
+      'Разрешение на доступ к инвентарю и оборудованию';
+
+  @override
   String get quantityToCheckout => 'Количество для выдачи';
 
   @override

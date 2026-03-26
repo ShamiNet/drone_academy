@@ -180,6 +180,7 @@
     "availableQuantity": "Available Quantity",
     "noInventoryItems": "No inventory items.",
     "inventory": "Inventory",
+    "inventoryAccessPermission": "Inventory and Equipment Access Permission",
     "quantityToCheckout": "Quantity to Checkout",
     "quantityToReturn": "Quantity to Return",
     "quantityLost": "Quantity Lost/Damaged",
