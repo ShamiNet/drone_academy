@@ -111,23 +111,27 @@ class _SelectTraineeForTestScreenState
     _loadTrainees();
   }
 
-  Future<void> _loadTrainees() async {
+  Future<void> _loadTrainees({bool forceRefresh = false}) async {
     try {
-      final users = await _apiService.fetchUsers();
+      final users = await _apiService.getUsers(forceRefresh: forceRefresh);
       final trainees = users
           .where((user) => user['role'] == 'trainee')
           .toList();
+      if (!mounted) return;
       setState(() {
         _trainees = trainees;
-        _filteredTrainees = trainees;
       });
+      _filterTrainees();
     } catch (e) {
-      // Handle error
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر تحديث قائمة المتدربين حالياً')),
+      );
     }
   }
 
   Future<void> _refreshTrainees() async {
-    await _loadTrainees();
+    await _loadTrainees(forceRefresh: true);
   }
 
   void _filterTrainees() {
@@ -612,12 +616,19 @@ class _SelectTraineeForTestScreenState
                               title: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    trainee['displayName'] ?? 'Unknown',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                                  Tooltip(
+                                    message:
+                                        (trainee['displayName'] ?? 'Unknown')
+                                            .toString(),
+                                    child: Text(
+                                      trainee['displayName'] ?? 'Unknown',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   if (trainee['nickname'] != null &&
@@ -627,12 +638,17 @@ class _SelectTraineeForTestScreenState
                                           .isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        trainee['nickname'],
-                                        style: TextStyle(
-                                          color: _primaryColor,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
+                                      child: Tooltip(
+                                        message: trainee['nickname'].toString(),
+                                        child: Text(
+                                          trainee['nickname'],
+                                          style: TextStyle(
+                                            color: _primaryColor,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     ),

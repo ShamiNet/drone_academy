@@ -189,6 +189,31 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
+  void _applyQuickUnitFilter(String unitType) {
+    setState(() {
+      _selectedUnitFilter = unitType;
+      _selectedManagerFilter = 'All';
+      if (unitType != 'markazia') {
+        _selectedAffiliationFilter = 'All';
+      } else if (_selectedAffiliationFilter == 'All') {
+        _selectedAffiliationFilter = '';
+      }
+    });
+  }
+
+  void _applyQuickAffiliationFilter(String affiliation, {String? unitType}) {
+    setState(() {
+      if (unitType != null && unitType.isNotEmpty) {
+        _selectedUnitFilter = unitType;
+      }
+      if (affiliation == 'administrative') {
+        _selectedUnitFilter = 'markazia';
+      }
+      _selectedAffiliationFilter = affiliation;
+      _selectedManagerFilter = 'All';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -240,7 +265,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   _selectedUnitFilter == 'All' ||
                   unitType == _selectedUnitFilter;
               bool matchesAffiliation =
-                  _selectedUnitFilter == 'All' ||
                   _selectedAffiliationFilter.isEmpty ||
                   _selectedAffiliationFilter == 'All' ||
                   affiliation == _selectedAffiliationFilter;
@@ -628,11 +652,17 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                     ),
                                   ),
                                 ),
-                                title: Text(
-                                  user['displayName'] ?? 'No Name',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
+                                title: Tooltip(
+                                  message: (user['displayName'] ?? 'No Name')
+                                      .toString(),
+                                  child: Text(
+                                    user['displayName'] ?? 'No Name',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 subtitle: Column(
@@ -649,27 +679,35 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                     Row(
                                       children: [
                                         if (unitType.isNotEmpty)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              4,
                                             ),
-                                            margin: const EdgeInsets.only(
-                                              right: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: _getUnitColor(unitType),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              unitType == 'liwa'
-                                                  ? l10n.liwa
-                                                  : l10n.markazia,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
+                                            onTap: () =>
+                                                _applyQuickUnitFilter(unitType),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              margin: const EdgeInsets.only(
+                                                right: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: _getUnitColor(unitType),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                unitType == 'liwa'
+                                                    ? l10n.liwa
+                                                    : l10n.markazia,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -677,26 +715,37 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                             user['affiliation']
                                                 .toString()
                                                 .isNotEmpty)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
+                                          InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              4,
                                             ),
-                                            decoration: BoxDecoration(
-                                              color: _getAffiliationColor(
-                                                user['affiliation'],
+                                            onTap: () =>
+                                                _applyQuickAffiliationFilter(
+                                                  user['affiliation'],
+                                                  unitType: unitType,
+                                                ),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: _getAffiliationColor(
+                                                  user['affiliation'],
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
                                               ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              _getAffiliationLabel(
-                                                user['affiliation'],
-                                              ),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
+                                              child: Text(
+                                                _getAffiliationLabel(
+                                                  user['affiliation'],
+                                                ),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -1161,7 +1210,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    await _apiService.updateUser({
+                    final success = await _apiService.updateUser({
                       'uid': userId,
                       'role': currentRole,
                       'parentId': currentParentId ?? '',
@@ -1172,12 +1221,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       'hasInventoryAccess': currentHasInventoryAccess,
                     });
                     if (mounted) {
-                      Navigator.pop(ctx);
-                      showCustomSnackBar(
-                        context,
-                        l10n.userDataUpdated,
-                        isError: false,
-                      );
+                      if (success) {
+                        Navigator.pop(ctx);
+                        showCustomSnackBar(
+                          context,
+                          l10n.userDataUpdated,
+                          isError: false,
+                        );
+                      } else {
+                        showCustomSnackBar(context, l10n.failed, isError: true);
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
@@ -1264,9 +1317,15 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                         itemBuilder: (context, index) {
                           final user = filtered[index];
                           return ListTile(
-                            title: Text(
-                              user['displayName'] ?? 'Unknown',
-                              style: const TextStyle(color: Colors.white),
+                            title: Tooltip(
+                              message: (user['displayName'] ?? 'Unknown')
+                                  .toString(),
+                              child: Text(
+                                user['displayName'] ?? 'Unknown',
+                                style: const TextStyle(color: Colors.white),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             onTap: () => Navigator.pop(context, {
                               'id': user['id'] ?? user['uid'],

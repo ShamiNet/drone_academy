@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:drone_academy/screens/profile_screen.dart';
 import 'package:drone_academy/screens/trainee_profile_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
+import 'package:drone_academy/utils/organization_mapping.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -16,6 +17,20 @@ class UserDetailsScreen extends StatelessWidget {
     required this.userData,
     this.forceInfoView = false, // القيمة الافتراضية
   });
+
+  String _unitTypeLabel(dynamic unitType) {
+    if (unitType == 'liwa') return 'ألوية';
+    if (unitType == 'markazia') return 'مركزية';
+    return 'غير محدد';
+  }
+
+  String _divisionLabel(Map<String, dynamic> user) {
+    final division = normalizeOrganizationValue(user['division']);
+    if (division.isNotEmpty) {
+      return division;
+    }
+    return divisionFromAffiliation(user['affiliation']);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -277,12 +292,51 @@ class UserDetailsScreen extends StatelessWidget {
                       // عرض الوحدة
                       _InfoItem(
                         "نوع الوحدة",
-                        userData['unitType'] == 'liwa'
-                            ? 'ألوية'
-                            : (userData['unitType'] == 'markazia'
-                                  ? 'مركزية'
-                                  : 'غير محدد'),
+                        _unitTypeLabel(userData['unitType']),
                         Icons.flag,
+                        onTap:
+                            _unitTypeLabel(userData['unitType']) != 'غير محدد'
+                            ? () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => _FilteredUsersScreen(
+                                      title:
+                                          'المستخدمون ضمن ${_unitTypeLabel(userData['unitType'])}',
+                                      filterType: _UserFilterType.unitType,
+                                      filterValue: userData['unitType']
+                                          .toString(),
+                                      filterLabel: _unitTypeLabel(
+                                        userData['unitType'],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                      ),
+                      _InfoItem(
+                        "التبعية",
+                        _divisionLabel(userData),
+                        Icons.account_tree,
+                        onTap: _divisionLabel(userData).isNotEmpty
+                            ? () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => _FilteredUsersScreen(
+                                      title:
+                                          'المستخدمون ضمن ${_divisionLabel(userData)}',
+                                      filterType: _UserFilterType.affiliation,
+                                      filterValue: affiliationFromDivision(
+                                        _divisionLabel(userData),
+                                      ),
+                                      filterLabel: _divisionLabel(userData),
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
                       ),
                     ]),
 
@@ -471,6 +525,14 @@ class UserDetailsScreen extends StatelessWidget {
                       fontSize: 15,
                     ),
                   ),
+                  trailing: item.onTap != null
+                      ? const Icon(
+                          Icons.chevron_right,
+                          color: Colors.white54,
+                          size: 18,
+                        )
+                      : null,
+                  onTap: item.onTap,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 4,
@@ -545,5 +607,142 @@ class _InfoItem {
   final String label;
   final String? value;
   final IconData icon;
-  _InfoItem(this.label, this.value, this.icon);
+  final VoidCallback? onTap;
+  _InfoItem(this.label, this.value, this.icon, {this.onTap});
+}
+
+enum _UserFilterType { unitType, affiliation }
+
+class _FilteredUsersScreen extends StatefulWidget {
+  final String title;
+  final _UserFilterType filterType;
+  final String filterValue;
+  final String filterLabel;
+
+  const _FilteredUsersScreen({
+    required this.title,
+    required this.filterType,
+    required this.filterValue,
+    required this.filterLabel,
+  });
+
+  @override
+  State<_FilteredUsersScreen> createState() => _FilteredUsersScreenState();
+}
+
+class _FilteredUsersScreenState extends State<_FilteredUsersScreen> {
+  final ApiService _apiService = ApiService();
+  late Future<List<dynamic>> _usersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersFuture = _loadUsers();
+  }
+
+  Future<List<dynamic>> _loadUsers({bool forceRefresh = false}) async {
+    final users = await _apiService.getUsers(forceRefresh: forceRefresh);
+    final filtered = users.where((user) {
+      if (widget.filterType == _UserFilterType.unitType) {
+        return (user['unitType'] ?? '').toString() == widget.filterValue;
+      }
+
+      final affiliation = (user['affiliation'] ?? '').toString().isNotEmpty
+          ? (user['affiliation'] ?? '').toString()
+          : affiliationFromDivision(user['division']);
+      return affiliation == widget.filterValue;
+    }).toList();
+
+    filtered.sort((a, b) {
+      final aName = (a['displayName'] ?? '').toString().toLowerCase();
+      final bName = (b['displayName'] ?? '').toString().toLowerCase();
+      return aName.compareTo(bName);
+    });
+    return filtered;
+  }
+
+  Future<void> _onRefresh() async {
+    setState(() {
+      _usersFuture = _loadUsers(forceRefresh: true);
+    });
+    await _usersFuture;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF111318),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF111318),
+        title: Text(widget.title),
+      ),
+      body: FutureBuilder<List<dynamic>>(
+        future: _usersFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final users = snapshot.data ?? [];
+          if (users.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'لا يوجد مستخدمون ضمن ${widget.filterLabel}',
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: users.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final user = users[index] as Map<String, dynamic>;
+                final name = (user['displayName'] ?? 'Unknown').toString();
+                final email = (user['email'] ?? '').toString();
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E2230),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.grey.shade800,
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    title: Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      email,
+                      style: const TextStyle(color: Colors.white60),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
 }

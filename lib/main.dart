@@ -9,6 +9,7 @@ import 'package:drone_academy/screens/splash_screen.dart';
 import 'package:drone_academy/services/api_service.dart';
 import 'package:drone_academy/services/language_service.dart';
 import 'package:drone_academy/services/notification_service.dart';
+import 'package:drone_academy/services/offline_sync_service.dart';
 import 'package:drone_academy/theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -95,14 +96,29 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Locale? _locale;
   ThemeMode _themeMode = ThemeMode.system; // الوضع الافتراضي
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSavedLanguage();
+    OfflineSyncService.instance.syncPendingMutations();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      OfflineSyncService.instance.syncPendingMutations();
+    }
   }
 
   // تحميل اللغة المحفوظة

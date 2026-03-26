@@ -110,9 +110,9 @@ class _TrainingDetailsScreenState extends State<TrainingDetailsScreen> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
-          // جلب الخطوات من السيرفر
+          // جلب الخطوات مع دعم الكاش لعرضها بدون إنترنت
           FutureBuilder<List<dynamic>>(
-            future: _apiService.fetchSteps(widget.training['id']),
+            future: _apiService.getTrainingSteps(widget.training['id']),
             builder: (context, stepsSnapshot) {
               if (stepsSnapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());

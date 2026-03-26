@@ -21,6 +21,12 @@ class EquipmentHistoryScreen extends StatefulWidget {
 class _EquipmentHistoryScreenState extends State<EquipmentHistoryScreen> {
   final ApiService _apiService = ApiService();
 
+  DateTime? _tryParseDate(dynamic value) {
+    final raw = value?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -38,10 +44,13 @@ class _EquipmentHistoryScreenState extends State<EquipmentHistoryScreen> {
               imagePath: 'assets/illustrations/no_data.svg',
             );
 
-          logs.sort(
-            (a, b) =>
-                (b['checkOutTime'] ?? '').compareTo(a['checkOutTime'] ?? ''),
-          );
+          logs.sort((a, b) {
+            final aTime = (a['checkInTime'] ?? a['checkOutTime'] ?? '')
+                .toString();
+            final bTime = (b['checkInTime'] ?? b['checkOutTime'] ?? '')
+                .toString();
+            return bTime.compareTo(aTime);
+          });
 
           return ListView.builder(
             padding: const EdgeInsets.all(8),
@@ -49,10 +58,8 @@ class _EquipmentHistoryScreenState extends State<EquipmentHistoryScreen> {
             itemBuilder: (context, index) {
               final log = logs[index];
               final userName = log['userName'] ?? 'Unknown';
-              final checkOutTime = DateTime.parse(log['checkOutTime']);
-              final checkInTime = log['checkInTime'] != null
-                  ? DateTime.parse(log['checkInTime'])
-                  : null;
+              final checkOutTime = _tryParseDate(log['checkOutTime']);
+              final checkInTime = _tryParseDate(log['checkInTime']);
               final notes = log['notesOnReturn'] ?? '';
 
               return Card(
@@ -65,14 +72,17 @@ class _EquipmentHistoryScreenState extends State<EquipmentHistoryScreen> {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "${l10n.checkedOut}: ${DateFormat.yMMMd().add_jm().format(checkOutTime)}",
-                      ),
+                      if (checkOutTime != null)
+                        Text(
+                          "${l10n.checkedOut}: ${DateFormat.yMMMd().add_jm().format(checkOutTime)}",
+                        ),
                       if (checkInTime != null)
                         Text(
                           "${l10n.checkedIn}: ${DateFormat.yMMMd().add_jm().format(checkInTime)}",
                           style: const TextStyle(color: Colors.green),
                         ),
+                      if (checkOutTime == null && checkInTime == null)
+                        const Text('لا يوجد توقيت مسجل'),
                       if (notes.isNotEmpty) Text("Note: $notes"),
                     ],
                   ),

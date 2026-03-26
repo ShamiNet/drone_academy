@@ -61,7 +61,7 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
     final traineeId = widget.traineeDoc['id'] ?? widget.traineeDoc['uid'];
     final traineeName = widget.traineeDoc['displayName'] ?? 'Unknown';
 
-    final saved = await _apiService.addCompetitionEntry({
+    final status = await _apiService.submitCompetitionEntryWithOfflineFallback({
       'competitionId': widget.competition['id'],
       'competitionTitle': widget.competition['title'],
       'traineeUid': traineeId,
@@ -74,16 +74,19 @@ class _CompetitionTimerScreenState extends State<CompetitionTimerScreen> {
       return;
     }
 
-    if (!saved) {
+    if (status == OfflineSubmitStatus.failed) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('فشل حفظ النتيجة. حاول مرة أخرى.')),
       );
       return;
     }
 
+    final message = status == OfflineSubmitStatus.queued
+        ? 'تم حفظ نتيجة $traineeName على الجهاز وسيتم رفعها تلقائياً عند توفر الإنترنت.'
+        : 'تم حفظ نتيجة $traineeName بنجاح.';
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('تم حفظ نتيجة $traineeName بنجاح.')));
+    ).showSnackBar(SnackBar(content: Text(message)));
 
     _stopwatch.reset();
     setState(() {

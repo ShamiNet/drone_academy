@@ -82,22 +82,39 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
   // --- دالة الاستعارة (محدثة) ---
   Future<void> _checkOutItem(Map<String, dynamic> item) async {
     // تحديث الحالة في المعدات
-    await _apiService.updateEquipment(item['id'], {
+    final updated = await _apiService.updateEquipment(item['id'], {
       'status': 'inUse',
       'currentUserId': currentUserId,
       'currentUserName': currentUserName,
     });
+    if (!updated) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('فشل تحديث حالة المعدة. حاول مرة أخرى.'),
+          ),
+        );
+      }
+      return;
+    }
 
     // إضافة سجل في Log
-    await _apiService.addEquipmentLog({
+    final logged = await _apiService.addEquipmentLog({
       'equipmentId': item['id'],
       'equipmentName': item['name'],
       'userId': currentUserId,
       'userName': currentUserName,
-      'checkOutTime': DateTime.now().toIso8601String(), // وقت الاستعارة
+      'checkOutTime': DateTime.now(), // وقت الاستعارة
       'checkInTime': null,
       'notesOnReturn': '',
     });
+    if (!logged && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم تحديث الحالة لكن فشل حفظ سجل الاستعارة.'),
+        ),
+      );
+    }
   }
 
   // --- دالة الإرجاع (محدثة) ---
@@ -140,12 +157,12 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     // منطق الإرجاع الجديد
-                    await _checkInItem(
+                    final done = await _checkInItem(
                       item,
                       notesController.text,
                       needsMaintenance,
                     );
-                    if (mounted) Navigator.pop(context);
+                    if (mounted && done) Navigator.pop(context);
                   },
                   child: Text(l10n.checkIn),
                 ),
@@ -157,33 +174,47 @@ class _EquipmentCheckoutScreenState extends State<EquipmentCheckoutScreen> {
     );
   }
 
-  Future<void> _checkInItem(
+  Future<bool> _checkInItem(
     Map<String, dynamic> item,
     String notes,
     bool needsMaintenance,
   ) async {
     // 1. تحديث حالة المعدة
-    await _apiService.updateEquipment(item['id'], {
+    final updated = await _apiService.updateEquipment(item['id'], {
       'status': needsMaintenance ? 'inMaintenance' : 'available',
       'currentUserId': '', // تفريغ المستخدم
       'currentUserName': '',
     });
+    if (!updated) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل تحديث حالة الإرجاع.')),
+        );
+      }
+      return false;
+    }
 
     // 2. تحديث السجل (إغلاق جلسة الاستعارة)
     // نحتاج للبحث عن السجل المفتوح.
     // للتبسيط هنا: سنضيف سجل جديد للإرجاع أو نحدث الأخير.
     // الأفضل في تصميم الـ API أن يكون هناك endpoint خاص بـ "return" يغلق آخر سجل.
     // سنفترض هنا إضافة سجل جديد للإرجاع لتوثيق العملية
-    await _apiService.addEquipmentLog({
+    final logged = await _apiService.addEquipmentLog({
       'equipmentId': item['id'],
       'equipmentName': item['name'],
       'userId': currentUserId,
       'userName': currentUserName,
       'checkOutTime': null, // لا يوجد وقت استعارة جديد
-      'checkInTime': DateTime.now().toIso8601String(), // وقت الإرجاع
+      'checkInTime': DateTime.now(), // وقت الإرجاع
       'notesOnReturn': notes,
       'type': 'return', // علامة لتمييز الإرجاع
     });
+    if (!logged && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم الإرجاع لكن فشل حفظ سجل العملية.')),
+      );
+    }
+    return logged;
   }
 
   @override

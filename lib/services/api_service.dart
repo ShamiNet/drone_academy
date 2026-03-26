@@ -8,6 +8,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart'; // ضروري للـ Navigator و Scaffold
 import 'package:drone_academy/models/ai_query_history.dart';
+import 'package:drone_academy/services/offline_outbox_service.dart';
 
 // ⚡ نظام تخزين مؤقت مع وقت انتهاء الصلاحية
 class CachedData {
@@ -18,6 +19,8 @@ class CachedData {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 }
+
+enum OfflineSubmitStatus { synced, queued, failed }
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -38,6 +41,10 @@ class ApiService {
 
   static Map<String, dynamic>? currentUser;
   static const String _userKey = 'cached_user_data';
+
+  String createClientMutationId(String prefix) {
+    return '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
+  }
 
   int _asInt(dynamic value, {int fallback = 0}) {
     if (value is int) return value;
@@ -76,6 +83,32 @@ class ApiService {
 
   Future<void> _invalidateStepsCache(String trainingId) async {
     await _invalidateCacheKey('CACHE_STEPS_$trainingId');
+  }
+
+  Future<void> _invalidateResultsCache({String? traineeUid}) async {
+    await _invalidateCacheKey('CACHE_RESULTS_ALL');
+    if (traineeUid != null && traineeUid.isNotEmpty) {
+      await _invalidateCacheKey('CACHE_RESULTS_$traineeUid');
+    }
+  }
+
+  Future<void> _invalidateDailyNotesCache({String? traineeUid}) async {
+    await _invalidateCacheKey('CACHE_DAILY_NOTES_ALL');
+    if (traineeUid != null && traineeUid.isNotEmpty) {
+      await _invalidateCacheKey('CACHE_DAILY_NOTES_$traineeUid');
+    }
+  }
+
+  Future<void> _invalidateCompetitionEntriesCache({
+    String? competitionId,
+    String? traineeUid,
+  }) async {
+    if (competitionId != null && competitionId.isNotEmpty) {
+      await _invalidateCacheKey('CACHE_COMP_ENTRIES_$competitionId');
+    }
+    if (traineeUid != null && traineeUid.isNotEmpty) {
+      await _invalidateCacheKey('CACHE_COMP_ENTRIES_TRAINEE_$traineeUid');
+    }
   }
 
   // نظام مراقبة حالة المستخدم (الحظر)
@@ -543,7 +576,9 @@ class ApiService {
   Future<bool> updateUser(Map<String, dynamic> userData) async {
     try {
       final dataToSend = Map<String, dynamic>.from(userData);
-      dataToSend['requester'] = currentUser;
+      final requester = Map<String, dynamic>.from(currentUser ?? {});
+      requester['uid'] = requester['uid'] ?? requester['id'];
+      dataToSend['requester'] = requester;
       final response = await http.post(
         Uri.parse('$baseUrl/users'),
         headers: {'Content-Type': 'application/json'},
@@ -665,10 +700,11 @@ class ApiService {
 
   Future<bool> updateEquipment(String id, Map<String, dynamic> updates) async {
     try {
+      final payload = _withRequester(updates);
       final response = await http.put(
         Uri.parse('$baseUrl/equipment/$id'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(updates),
+        body: json.encode(payload),
       );
       if (response.statusCode != 200)
         _logError("UPDATE_EQUIPMENT", response.body);
@@ -681,13 +717,14 @@ class ApiService {
 
   Future<bool> addEquipment(Map<String, dynamic> data) async {
     try {
+      final payload = Map<String, dynamic>.from(data);
       if (data['createdAt'] != null) {
-        data['createdAt'] = DateTime.now().toIso8601String();
+        payload['createdAt'] = DateTime.now().toIso8601String();
       }
       final response = await http.post(
         Uri.parse('$baseUrl/equipment'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(data),
+        body: json.encode(_withRequester(payload)),
       );
       if (response.statusCode != 200) _logError("ADD_EQUIPMENT", response.body);
       return response.statusCode == 200;
@@ -699,16 +736,16 @@ class ApiService {
 
   Future<bool> addEquipmentLog(Map<String, dynamic> data) async {
     try {
-      if (data['checkOutTime'] != null) {
-        data['checkOutTime'] = data['checkOutTime'].toIso8601String();
-      }
+      final payload = Map<String, dynamic>.from(data);
+      payload['checkOutTime'] = _normalizeDateValue(payload['checkOutTime']);
+      payload['checkInTime'] = _normalizeDateValue(payload['checkInTime']);
       final response = await http.post(
         Uri.parse('$baseUrl/equipment_log'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(data),
+        body: json.encode(_withRequester(payload)),
       );
       if (response.statusCode != 200) _logError("ADD_EQUIP_LOG", response.body);
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       _logError("ADD_EQUIP_LOG", e.toString());
       return false;
@@ -733,10 +770,14 @@ class ApiService {
 
   Future<bool> deleteEquipment(String id) async {
     try {
-      final response = await http.delete(Uri.parse('$baseUrl/equipment/$id'));
+      final response = await http.delete(
+        Uri.parse('$baseUrl/equipment/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'requester': _buildRequesterPayload()}),
+      );
       if (response.statusCode != 200)
         _logError("DELETE_EQUIPMENT", response.body);
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       _logError("DELETE_EQUIPMENT", e.toString());
       return false;
@@ -747,10 +788,12 @@ class ApiService {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl/equipment_log/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'requester': _buildRequesterPayload()}),
       );
       if (response.statusCode != 200)
         _logError("DELETE_EQUIP_LOG", response.body);
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       _logError("DELETE_EQUIP_LOG", e.toString());
       return false;
@@ -783,10 +826,11 @@ class ApiService {
     Map<String, dynamic> updates,
   ) async {
     try {
+      final payload = _withRequester(updates);
       final response = await http.put(
         Uri.parse('$baseUrl/inventory/$id'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(updates),
+        body: json.encode(payload),
       );
       if (response.statusCode != 200)
         _logError("UPDATE_INVENTORY", response.body);
@@ -799,16 +843,17 @@ class ApiService {
 
   Future<bool> addInventoryItem(Map<String, dynamic> data) async {
     try {
+      final payload = Map<String, dynamic>.from(data);
       if (data['createdAt'] != null) {
-        data['createdAt'] = DateTime.now().toIso8601String();
+        payload['createdAt'] = DateTime.now().toIso8601String();
       }
       final response = await http.post(
         Uri.parse('$baseUrl/inventory'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(data),
+        body: json.encode(_withRequester(payload)),
       );
       if (response.statusCode != 200) _logError("ADD_INVENTORY", response.body);
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       _logError("ADD_INVENTORY", e.toString());
       return false;
@@ -817,14 +862,15 @@ class ApiService {
 
   Future<bool> addInventoryLog(Map<String, dynamic> data) async {
     try {
-      if (data['date'] != null) data['date'] = data['date'].toIso8601String();
+      final payload = Map<String, dynamic>.from(data);
+      payload['date'] = _normalizeDateValue(payload['date']);
       final response = await http.post(
         Uri.parse('$baseUrl/inventory_log'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(data),
+        body: json.encode(_withRequester(payload)),
       );
       if (response.statusCode != 200) _logError("ADD_INV_LOG", response.body);
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       _logError("ADD_INV_LOG", e.toString());
       return false;
@@ -849,10 +895,14 @@ class ApiService {
 
   Future<bool> deleteInventoryItem(String id) async {
     try {
-      final response = await http.delete(Uri.parse('$baseUrl/inventory/$id'));
+      final response = await http.delete(
+        Uri.parse('$baseUrl/inventory/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'requester': _buildRequesterPayload()}),
+      );
       if (response.statusCode != 200)
         _logError("DELETE_INVENTORY", response.body);
-      return true;
+      return response.statusCode == 200;
     } catch (e) {
       _logError("DELETE_INVENTORY", e.toString());
       return false;
@@ -1037,6 +1087,18 @@ class ApiService {
       _logError("FETCH_STEPS", e.toString());
       return [];
     }
+  }
+
+  // جلب خطوات تدريب محدد (بالكاش) ليدعم العرض بدون إنترنت
+  Future<List<dynamic>> getTrainingSteps(
+    String trainingId, {
+    bool forceRefresh = false,
+  }) {
+    return fetchWithCache(
+      cacheKey: 'CACHE_STEPS_$trainingId',
+      fetcher: () => fetchSteps(trainingId),
+      forceRefresh: forceRefresh,
+    );
   }
 
   // --- ⚡ محرك الكاش الجديد (Future-based) لتوفير القراءات ---
@@ -1281,12 +1343,40 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200) _logError("ADD_RESULT", response.body);
+      if (response.statusCode != 200) {
+        _logError("ADD_RESULT", response.body);
+        return false;
+      }
+
+      await _invalidateResultsCache(traineeUid: data['traineeUid']?.toString());
       return true;
     } catch (e) {
       _logError("ADD_RESULT", e.toString());
       return false;
     }
+  }
+
+  Future<OfflineSubmitStatus> submitResultWithOfflineFallback(
+    Map<String, dynamic> data,
+  ) async {
+    final payload = Map<String, dynamic>.from(data);
+    payload['clientMutationId'] ??= createClientMutationId('result');
+
+    final saved = await addResult(payload);
+    if (saved) {
+      return OfflineSubmitStatus.synced;
+    }
+
+    final connectivity = await testServerConnectivity();
+    if (connectivity['success'] == true) {
+      return OfflineSubmitStatus.failed;
+    }
+
+    await OfflineOutboxService.instance.enqueue(
+      type: OfflineMutationType.addResult,
+      payload: payload,
+    );
+    return OfflineSubmitStatus.queued;
   }
 
   Future<List<dynamic>> fetchDailyNotes({String? traineeUid}) async {
@@ -1315,12 +1405,42 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200) _logError("ADD_NOTE", response.body);
+      if (response.statusCode != 200) {
+        _logError("ADD_NOTE", response.body);
+        return false;
+      }
+
+      await _invalidateDailyNotesCache(
+        traineeUid: data['traineeUid']?.toString(),
+      );
       return true;
     } catch (e) {
       _logError("ADD_NOTE", e.toString());
       return false;
     }
+  }
+
+  Future<OfflineSubmitStatus> submitDailyNoteWithOfflineFallback(
+    Map<String, dynamic> data,
+  ) async {
+    final payload = Map<String, dynamic>.from(data);
+    payload['clientMutationId'] ??= createClientMutationId('daily_note');
+
+    final saved = await addDailyNote(payload);
+    if (saved) {
+      return OfflineSubmitStatus.synced;
+    }
+
+    final connectivity = await testServerConnectivity();
+    if (connectivity['success'] == true) {
+      return OfflineSubmitStatus.failed;
+    }
+
+    await OfflineOutboxService.instance.enqueue(
+      type: OfflineMutationType.addDailyNote,
+      payload: payload,
+    );
+    return OfflineSubmitStatus.queued;
   }
 
   Future<bool> updateDailyNote(String id, Map<String, dynamic> data) async {
@@ -1333,7 +1453,14 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200) _logError("UPDATE_NOTE", response.body);
+      if (response.statusCode != 200) {
+        _logError("UPDATE_NOTE", response.body);
+        return false;
+      }
+
+      await _invalidateDailyNotesCache(
+        traineeUid: data['traineeUid']?.toString(),
+      );
       return true;
     } catch (e) {
       _logError("UPDATE_NOTE", e.toString());
@@ -1341,10 +1468,15 @@ class ApiService {
     }
   }
 
-  Future<bool> deleteDailyNote(String id) async {
+  Future<bool> deleteDailyNote(String id, {String? traineeUid}) async {
     try {
       final response = await http.delete(Uri.parse('$baseUrl/daily_notes/$id'));
-      if (response.statusCode != 200) _logError("DELETE_NOTE", response.body);
+      if (response.statusCode != 200) {
+        _logError("DELETE_NOTE", response.body);
+        return false;
+      }
+
+      await _invalidateDailyNotesCache(traineeUid: traineeUid);
       return true;
     } catch (e) {
       _logError("DELETE_NOTE", e.toString());
@@ -1485,11 +1617,39 @@ class ApiService {
         _logError("ADD_COMP_ENTRY", response.body);
         return false;
       }
+
+      await _invalidateCompetitionEntriesCache(
+        competitionId: data['competitionId']?.toString(),
+        traineeUid: data['traineeUid']?.toString(),
+      );
       return true;
     } catch (e) {
       _logError("ADD_COMP_ENTRY", e.toString());
       return false;
     }
+  }
+
+  Future<OfflineSubmitStatus> submitCompetitionEntryWithOfflineFallback(
+    Map<String, dynamic> data,
+  ) async {
+    final payload = Map<String, dynamic>.from(data);
+    payload['clientMutationId'] ??= createClientMutationId('competition_entry');
+
+    final saved = await addCompetitionEntry(payload);
+    if (saved) {
+      return OfflineSubmitStatus.synced;
+    }
+
+    final connectivity = await testServerConnectivity();
+    if (connectivity['success'] == true) {
+      return OfflineSubmitStatus.failed;
+    }
+
+    await OfflineOutboxService.instance.enqueue(
+      type: OfflineMutationType.addCompetitionEntry,
+      payload: payload,
+    );
+    return OfflineSubmitStatus.queued;
   }
 
   // ===========================================================================
@@ -2038,6 +2198,25 @@ class ApiService {
     } catch (e) {
       print("Cache Save Error ($key): $e");
     }
+  }
+
+  Map<String, dynamic> _buildRequesterPayload() {
+    final requester = Map<String, dynamic>.from(currentUser ?? {});
+    requester['uid'] = requester['uid'] ?? requester['id'];
+    return requester;
+  }
+
+  Map<String, dynamic> _withRequester(Map<String, dynamic> data) {
+    final payload = Map<String, dynamic>.from(data);
+    payload['requester'] = _buildRequesterPayload();
+    return payload;
+  }
+
+  String? _normalizeDateValue(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value.toIso8601String();
+    if (value is String) return value;
+    return value.toString();
   }
 
   Future<List<dynamic>> _loadFromDisk(String key) async {

@@ -103,9 +103,25 @@ class _ManageEquipmentScreenState extends State<ManageEquipmentScreen> {
           ),
           TextButton(
             child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
-            onPressed: () {
-              _apiService.deleteEquipment(id); // الحذف عبر السيرفر
+            onPressed: () async {
+              final deleted = await _apiService.deleteEquipment(id);
               Navigator.pop(ctx);
+              if (!mounted) return;
+
+              if (deleted) {
+                setState(() {
+                  _equipmentFuture = _apiService.getEquipment(
+                    forceRefresh: true,
+                  );
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم حذف المعدة بنجاح')),
+                );
+              } else {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(l10n.failed)));
+              }
             },
           ),
         ],

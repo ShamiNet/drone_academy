@@ -403,6 +403,13 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
     }
   }
 
+  void _showSaveFailureMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1147,18 +1154,33 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
                   ? null
                   : () async {
                       final currentUser = FirebaseAuth.instance.currentUser;
-                      await _apiService.addResult({
-                        'traineeUid': _traineeId,
-                        'trainingId': selectedId,
-                        'trainingTitle': selectedTitle,
-                        'masteryPercentage': mastery.toInt(),
-                        'date': DateTime.now().toIso8601String(),
-                        'trainerUid': currentUser?.uid,
-                        'trainerName': currentUser?.displayName ?? 'Unknown',
-                      });
+                      final status = await _apiService
+                          .submitResultWithOfflineFallback({
+                            'traineeUid': _traineeId,
+                            'trainingId': selectedId,
+                            'trainingTitle': selectedTitle,
+                            'masteryPercentage': mastery.toInt(),
+                            'date': DateTime.now().toIso8601String(),
+                            'trainerUid': currentUser?.uid,
+                            'trainerName':
+                                currentUser?.displayName ?? 'Unknown',
+                          });
+                      if (status == OfflineSubmitStatus.failed) {
+                        _showSaveFailureMessage(
+                          'تعذر حفظ النتيجة حالياً. تحقق من الاتصال ثم حاول مرة أخرى',
+                        );
+                        return;
+                      }
+
                       if (mounted) {
                         Navigator.pop(ctx);
-                        _loadProgressData();
+                        if (status == OfflineSubmitStatus.synced) {
+                          _loadProgressData();
+                        } else {
+                          _showSaveFailureMessage(
+                            'تم حفظ النتيجة محلياً وسيتم رفعها تلقائياً عند توفر الإنترنت',
+                          );
+                        }
                       }
                     },
               child: Text(l10n.save),
@@ -1448,14 +1470,28 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
           ElevatedButton(
             onPressed: () async {
               if (noteController.text.isNotEmpty) {
-                await _apiService.addDailyNote({
-                  'traineeUid': _traineeId,
-                  'note': noteController.text,
-                  'date': DateTime.now().toIso8601String(),
-                });
+                final status = await _apiService
+                    .submitDailyNoteWithOfflineFallback({
+                      'traineeUid': _traineeId,
+                      'note': noteController.text,
+                      'date': DateTime.now().toIso8601String(),
+                    });
+                if (status == OfflineSubmitStatus.failed) {
+                  _showSaveFailureMessage(
+                    'تعذر حفظ الملاحظة حالياً. تحقق من الاتصال ثم حاول مرة أخرى',
+                  );
+                  return;
+                }
+
                 if (mounted) {
                   Navigator.pop(ctx);
-                  setState(() {});
+                  if (status == OfflineSubmitStatus.synced) {
+                    setState(() {});
+                  } else {
+                    _showSaveFailureMessage(
+                      'تم حفظ الملاحظة محلياً وسيتم رفعها تلقائياً عند توفر الإنترنت',
+                    );
+                  }
                 }
               }
             },
@@ -1471,7 +1507,16 @@ class _TraineeProfileScreenState extends State<TraineeProfileScreen> {
   }
 
   Future<void> _deleteNote(String id) async {
-    await _apiService.deleteDailyNote(id);
+    final deleted = await _apiService.deleteDailyNote(
+      id,
+      traineeUid: _traineeId,
+    );
+    if (!deleted) {
+      _showSaveFailureMessage(
+        'تعذر حذف الملاحظة حالياً. تحقق من الاتصال ثم حاول مرة أخرى',
+      );
+      return;
+    }
     setState(() {});
   }
 }
