@@ -74,6 +74,10 @@ class ApiService {
     await _invalidateCacheKey('CACHE_TRAININGS');
   }
 
+  Future<void> _invalidateStepsCache(String trainingId) async {
+    await _invalidateCacheKey('CACHE_STEPS_$trainingId');
+  }
+
   // نظام مراقبة حالة المستخدم (الحظر)
   // ===========================================================================
 
@@ -980,6 +984,45 @@ class ApiService {
     }
   }
 
+  Future<bool> updateTrainingStepOrders(
+    String trainingId,
+    List<dynamic> steps,
+  ) async {
+    try {
+      _log(
+        "UPDATE_STEP_ORDER",
+        "Sending ${steps.length} reordered steps for training $trainingId: ${steps.map((step) => '${step['id']}=>${step['order']}').join(', ')}",
+      );
+
+      final payload = {
+        'steps': steps
+            .map((step) => {'id': step['id'], 'order': step['order']})
+            .toList(),
+      };
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/trainings/$trainingId/steps/reorder'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(payload),
+      );
+
+      if (response.statusCode != 200) {
+        _logError("UPDATE_STEP_ORDER", response.body);
+        return false;
+      }
+
+      await _invalidateStepsCache(trainingId);
+      _log(
+        "UPDATE_STEP_ORDER",
+        "Steps cache invalidated after reorder for training $trainingId",
+      );
+      return true;
+    } catch (e) {
+      _logError("UPDATE_STEP_ORDER", e.toString());
+      return false;
+    }
+  }
+
   Future<List<dynamic>> fetchSteps(String trainingId) async {
     try {
       final response = await http.get(
@@ -1146,6 +1189,7 @@ class ApiService {
   Stream<List<dynamic>> streamSteps(String tid) => _createSmartStream(
     fetcher: () => fetchSteps(tid),
     cacheKey: 'CACHE_STEPS_$tid',
+    emitEmptyResults: true,
   );
 
   Future<bool> addTrainingStep(String tid, Map<String, dynamic> data) async {
@@ -1155,7 +1199,12 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200) _logError("ADD_STEP", response.body);
+      if (response.statusCode != 200) {
+        _logError("ADD_STEP", response.body);
+        return false;
+      }
+
+      await _invalidateStepsCache(tid);
       return true;
     } catch (e) {
       _logError("ADD_STEP", e.toString());
@@ -1174,7 +1223,12 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: json.encode(data),
       );
-      if (response.statusCode != 200) _logError("UPDATE_STEP", response.body);
+      if (response.statusCode != 200) {
+        _logError("UPDATE_STEP", response.body);
+        return false;
+      }
+
+      await _invalidateStepsCache(tid);
       return true;
     } catch (e) {
       _logError("UPDATE_STEP", e.toString());
@@ -1187,7 +1241,12 @@ class ApiService {
       final response = await http.delete(
         Uri.parse('$baseUrl/trainings/$tid/steps/$sid'),
       );
-      if (response.statusCode != 200) _logError("DELETE_STEP", response.body);
+      if (response.statusCode != 200) {
+        _logError("DELETE_STEP", response.body);
+        return false;
+      }
+
+      await _invalidateStepsCache(tid);
       return true;
     } catch (e) {
       _logError("DELETE_STEP", e.toString());
@@ -1903,6 +1962,7 @@ class ApiService {
   Stream<List<dynamic>> _createSmartStream({
     required Future<List<dynamic>> Function() fetcher,
     required String cacheKey,
+    bool emitEmptyResults = false,
   }) {
     late StreamController<List<dynamic>> controller;
     Timer? timer;
@@ -1922,7 +1982,7 @@ class ApiService {
 
       try {
         final data = await fetcher();
-        if (!controller.isClosed && data.isNotEmpty) {
+        if (!controller.isClosed && (emitEmptyResults || data.isNotEmpty)) {
           controller.add(data);
           _saveToDisk(cacheKey, data);
           // ⚡ حفظ في الذاكرة المؤقتة مع وقت انتهاء الصلاحية

@@ -29,6 +29,8 @@ class _EditTrainingScreenState extends State<EditTrainingScreen> {
   String? _imageUrl;
   bool _isUploading = false;
   String? _currentTrainingId;
+  List<Map<String, dynamic>>? _stepsDraft;
+  bool _isSavingStepOrder = false;
   final _cropKey = GlobalKey();
 
   // ألوان التصميم
@@ -143,6 +145,194 @@ class _EditTrainingScreenState extends State<EditTrainingScreen> {
     }
   }
 
+  void _refreshStepsList() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  int _stepOrder(dynamic step) {
+    if (step['order'] is int) return step['order'] as int;
+    return int.tryParse(step['order']?.toString() ?? '') ?? 999999;
+  }
+
+  List<Map<String, dynamic>> _copySteps(List<dynamic> steps) {
+    return steps.map((step) => Map<String, dynamic>.from(step as Map)).toList()
+      ..sort((a, b) {
+        final orderComparison = _stepOrder(a).compareTo(_stepOrder(b));
+        if (orderComparison != 0) return orderComparison;
+        return (a['title'] ?? '').toString().compareTo(
+          (b['title'] ?? '').toString(),
+        );
+      });
+  }
+
+  void _clearStepDraft() {
+    _stepsDraft = null;
+  }
+
+  void _showStepActionError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تعذر حفظ التغييرات على الخطوة، حاول مرة أخرى'),
+      ),
+    );
+  }
+
+  Future<void> _reorderSteps(
+    List<Map<String, dynamic>> currentSteps,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (_currentTrainingId == null || _isSavingStepOrder) return;
+
+    final originalSteps = _copySteps(currentSteps);
+    final reorderedSteps = _copySteps(currentSteps);
+
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+
+    final movedStep = reorderedSteps.removeAt(oldIndex);
+    reorderedSteps.insert(newIndex, movedStep);
+
+    for (var index = 0; index < reorderedSteps.length; index++) {
+      reorderedSteps[index]['order'] = index;
+    }
+
+    setState(() {
+      _isSavingStepOrder = true;
+      _stepsDraft = reorderedSteps;
+    });
+
+    final success = await _apiService.updateTrainingStepOrders(
+      _currentTrainingId!,
+      reorderedSteps,
+    );
+
+    if (!mounted) return;
+
+    if (!success) {
+      setState(() {
+        _isSavingStepOrder = false;
+        _stepsDraft = originalSteps;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذر حفظ ترتيب الخطوات، تمت إعادة الوضع السابق'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingStepOrder = false;
+      _stepsDraft = reorderedSteps;
+    });
+    _refreshStepsList();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم تحديث ترتيب الخطوات بنجاح')),
+    );
+  }
+
+  Widget _buildStepTile(Map<String, dynamic> step) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(
+            color: step['type'] == 'video' ? Colors.red : Colors.green,
+            width: 4,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: (step['type'] == 'video' ? Colors.red : Colors.green)
+              .withOpacity(0.1),
+          child: Icon(
+            step['type'] == 'video' ? Icons.videocam : Icons.check_box,
+            color: step['type'] == 'video' ? Colors.red : Colors.green,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          step['title'],
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: step['type'] == 'video'
+            ? Text(
+                step['videoUrl'] ?? '',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _stepOrder(step) == 999999 ? '#-' : '#${_stepOrder(step) + 1}',
+              style: const TextStyle(color: Colors.white54),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: () => _deleteStep(step),
+            ),
+          ],
+        ),
+        onTap: () => _showEditStepDialog(step),
+      ),
+    );
+  }
+
+  Widget _buildReorderableStepTile(Map<String, dynamic> step, int index) {
+    return Container(
+      key: ValueKey(step['id']),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: _buildStepTile(step)),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ReorderableDragStartListener(
+              index: index,
+              child: const Icon(Icons.drag_indicator, color: Colors.white54),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteStep(Map<String, dynamic> step) async {
+    if (_currentTrainingId == null) return;
+
+    final deleted = await _apiService.deleteTrainingStep(
+      _currentTrainingId!,
+      step['id'],
+    );
+
+    if (!deleted) {
+      _showStepActionError();
+      return;
+    }
+
+    setState(_clearStepDraft);
+    _refreshStepsList();
+  }
+
   void _showAddStepDialog() {
     final titleController = TextEditingController();
     final videoUrlController = TextEditingController();
@@ -160,13 +350,23 @@ class _EditTrainingScreenState extends State<EditTrainingScreen> {
           onSave: () async {
             if (titleController.text.isNotEmpty && _currentTrainingId != null) {
               final steps = await _apiService.fetchSteps(_currentTrainingId!);
-              await _apiService.addTrainingStep(_currentTrainingId!, {
-                'title': titleController.text,
-                'type': stepType,
-                'videoUrl': videoUrlController.text,
-                'order': steps.length,
-              });
-              if (mounted) Navigator.pop(context);
+              final created = await _apiService
+                  .addTrainingStep(_currentTrainingId!, {
+                    'title': titleController.text,
+                    'type': stepType,
+                    'videoUrl': videoUrlController.text,
+                    'order': steps.length,
+                  });
+              if (!created) {
+                _showStepActionError();
+                return;
+              }
+
+              if (mounted) {
+                setState(_clearStepDraft);
+                Navigator.pop(context);
+                _refreshStepsList();
+              }
             }
           },
         ),
@@ -192,13 +392,22 @@ class _EditTrainingScreenState extends State<EditTrainingScreen> {
           onTypeChanged: (v) => setSt(() => stepType = v!),
           onSave: () async {
             if (titleController.text.isNotEmpty) {
-              await _apiService
+              final updated = await _apiService
                   .updateTrainingStep(_currentTrainingId!, step['id'], {
                     'title': titleController.text,
                     'type': stepType,
                     'videoUrl': videoUrlController.text,
                   });
-              if (mounted) Navigator.pop(context);
+              if (!updated) {
+                _showStepActionError();
+                return;
+              }
+
+              if (mounted) {
+                setState(_clearStepDraft);
+                Navigator.pop(context);
+                _refreshStepsList();
+              }
             }
           },
         ),
@@ -523,7 +732,7 @@ class _EditTrainingScreenState extends State<EditTrainingScreen> {
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting)
                     return const Center(child: CircularProgressIndicator());
-                  final steps = snapshot.data ?? [];
+                  final steps = _stepsDraft ?? _copySteps(snapshot.data ?? []);
 
                   if (steps.isEmpty) {
                     return Container(
@@ -554,85 +763,45 @@ class _EditTrainingScreenState extends State<EditTrainingScreen> {
                     );
                   }
 
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: steps.length,
-                    separatorBuilder: (ctx, i) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final step = steps[index];
-                      return FadeInLeft(
-                        delay: Duration(milliseconds: index * 100),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _cardColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border(
-                              left: BorderSide(
-                                color: step['type'] == 'video'
-                                    ? Colors.red
-                                    : Colors.green,
-                                width: 4,
-                              ),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  (step['type'] == 'video'
-                                          ? Colors.red
-                                          : Colors.green)
-                                      .withOpacity(0.1),
-                              child: Icon(
-                                step['type'] == 'video'
-                                    ? Icons.videocam
-                                    : Icons.check_box,
-                                color: step['type'] == 'video'
-                                    ? Colors.red
-                                    : Colors.green,
-                                size: 20,
-                              ),
-                            ),
-                            title: Text(
-                              step['title'],
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: step['type'] == 'video'
-                                ? Text(
-                                    step['videoUrl'] ?? '',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 10,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  )
-                                : null,
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.redAccent,
-                              ),
-                              onPressed: () => _apiService.deleteTrainingStep(
-                                _currentTrainingId!,
-                                step['id'],
-                              ),
-                            ),
-                            onTap: () => _showEditStepDialog(step),
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          _isSavingStepOrder
+                              ? 'جارٍ حفظ ترتيب الخطوات...'
+                              : 'اسحب من أيقونة الترتيب لتغيير ترتيب الخطوات.',
+                          style: TextStyle(
+                            color: _isSavingStepOrder
+                                ? Colors.amber
+                                : Colors.white60,
+                            fontSize: 12,
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      if (_isSavingStepOrder)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        buildDefaultDragHandles: false,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: steps.length,
+                        onReorder: (oldIndex, newIndex) =>
+                            _reorderSteps(steps, oldIndex, newIndex),
+                        itemBuilder: (context, index) {
+                          final step = steps[index];
+                          return FadeInLeft(
+                            key: ValueKey('step_anim_${step['id']}'),
+                            delay: Duration(milliseconds: index * 100),
+                            child: _buildReorderableStepTile(step, index),
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),
